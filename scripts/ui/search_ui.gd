@@ -68,11 +68,19 @@ func open_for(c: Node) -> void:
 	if _player != null:
 		_player.movement_locked = true
 	_gs.set_state("UI_OPEN")
-	# 确保每个 slot 都带 inspected/inspecting 字段
+	# Phase 2B:用 LocalInspectLog 作为 source of truth,hydrate entry cache
+	# 旧逻辑只补 entry 字段;新逻辑根据 per-peer log 写入 inspected/examined cache
+	var lil = get_node_or_null("/root/LocalInspectLog")
+	if lil != null and lil.has_method("hydrate_container_entries"):
+		lil.hydrate_container_entries(c)
 	for e in c.contents.entries:
+		# inspecting 总是从 0 开始(运行时状态,不持久化)
+		e["inspecting"] = false
+		# 兜底:hydrate 已经写过 inspected/examined,这里再防御一遍
 		if not e.has("inspected"):
 			e["inspected"] = false
-		e["inspecting"] = false
+		if not e.has("examined"):
+			e["examined"] = e.get("inspected", false)
 	container_panel.setup(c.contents, "container", c.get_type_name())
 	inventory_panel.setup(_inv.grid, "inventory", "背包")
 	_connect_panel(container_panel)
@@ -89,7 +97,11 @@ func open_for(c: Node) -> void:
 	# 状态转移
 	_inspect_timer = 0.0
 	_current_inspect_entry = {}
-	if _container.is_searched:
+	# Phase 2B:is_searched 改用 per-peer log 计算,不再读 _container.is_searched
+	var fully: bool = false
+	if lil != null and lil.has_method("is_container_fully_inspected"):
+		fully = lil.is_container_fully_inspected(c)
+	if fully:
 		_state = UIState.IDLE
 	else:
 		_state = UIState.OPENING
@@ -101,18 +113,13 @@ func _connect_panel(p: GridPanel) -> void:
 
 func close_ui() -> void:
 	_cancel_drag()
-	# inspecting 清零，inspected 保留
+	# inspecting 清零,inspected 保留(cache 由 LocalInspectLog 持久)
 	if _container != null and is_instance_valid(_container) and _container.contents != null:
 		for e in _container.contents.entries:
 			e["inspecting"] = false
-		# 写回 is_searched 标志：若全部 inspected，则容器算已搜刮
-		var all_done: bool = true
-		for e in _container.contents.entries:
-			if not e.get("inspected", false):
-				all_done = false
-				break
-		if all_done and not _container.contents.entries.is_empty():
-			_container.is_searched = true
+		# Phase 2B:is_searched 改 per-peer 计算(LocalInspectLog),不再写 _container.is_searched
+		# 旧逻辑写 _container.is_searched = true 让"再开"跳过 inspect — 现在 per-peer 化
+		# (open_for 进来时已用 lil.is_container_fully_inspected 决定走 IDLE)
 	_state = UIState.IDLE
 	_current_inspect_entry = {}
 	if _container != null and is_instance_valid(_container):
@@ -130,12 +137,13 @@ func _advance_to_next_inspect() -> void:
 	if _container == null or _container.contents == null:
 		_state = UIState.IDLE
 		return
-	# 清零所有 inspecting，然后挑下一个未 inspected
+	# 清零所有 inspecting,然后挑下一个未 inspected
 	for e in _container.contents.entries:
 		e["inspecting"] = false
 	var next: Dictionary = _pick_next_entry()
 	if next.is_empty():
-		# 全部完成
+		# 全部完成 — Phase 2B:per-peer 的 is_searched 已通过 LocalInspectLog 体现,
+		# 这里仍设 _container.is_searched(单人语义保留;多人时无害)
 		_state = UIState.IDLE
 		_current_inspect_entry = {}
 		_container.is_searched = true
@@ -264,6 +272,12 @@ func _process(delta: float) -> void:
 			_current_inspect_entry["inspected"] = true
 			_current_inspect_entry["examined"] = true  # 兼容旧字段
 			_current_inspect_entry["inspecting"] = false
+			# Phase 2B:写入 LocalInspectLog(source of truth)
+			var lil = get_node_or_null("/root/LocalInspectLog")
+			if lil != null and _container != null and is_instance_valid(_container):
+				var uid: int = int(_current_inspect_entry.get("uid", -1))
+				if uid >= 0:
+					lil.mark_inspected(String(_container.get_path()), uid)
 			_advance_to_next_inspect()
 		else:
 			container_panel.queue_redraw_overlays()

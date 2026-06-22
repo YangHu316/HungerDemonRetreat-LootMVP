@@ -25,6 +25,7 @@ Logger="*res://scripts/utils/logger.gd"
 Stash="*res://scripts/autoloads/stash.gd"
 OrderPool="*res://scripts/autoloads/order_pool.gd"
 MultiplayerManager="*res://scripts/autoloads/multiplayer_manager.gd"
+LocalInspectLog="*res://scripts/autoloads/local_inspect_log.gd"
 
 [display]
 

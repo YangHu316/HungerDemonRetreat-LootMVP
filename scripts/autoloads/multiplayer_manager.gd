@@ -139,6 +139,57 @@ func _rpc_start_game() -> void:
 	game_started.emit()
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
+# ──────────────────────────────────────────────────────────────
+# Phase 2B Tier B1:Round 生命周期 host-authoritative
+# ──────────────────────────────────────────────────────────────
+
+# host 在 main.gd._ready 完成本地 start_round 后调,广播给所有 client
+# B2 会扩 payload 加 container entries(每个容器 path → wire entries)
+func broadcast_round_start() -> void:
+	if not is_host():
+		return
+	var containers_payload: Dictionary = {}
+	# 收集所有 containers 当前的 wire entries
+	# main.gd._on_round_started 已先调过 reset_and_regenerate(host 分支),uid 全新
+	for c in get_tree().get_nodes_in_group("containers"):
+		if c.has_method("serialize_entries"):
+			containers_payload[String(c.get_path())] = c.serialize_entries()
+	var payload: Dictionary = {
+		"round_time": 900.0,
+		"containers": containers_payload,
+	}
+	_rpc_apply_round_start.rpc(payload)
+
+# host 广播给所有 peer(host 也通过 call_local 进来,但 round_active 已 true → guard 跳过)
+@rpc("authority", "call_local", "reliable")
+func _rpc_apply_round_start(payload: Dictionary) -> void:
+	var gs = get_node_or_null("/root/GameSession")
+	if gs == null:
+		return
+	# Guard:host 已经本地 start_round 过,跳过(避免 round_started 信号重复 emit)
+	if gs.round_active:
+		# host call_local 走这里;同时 host 的 containers 已生成。客户端也不该到这条路径,因为 round_active 仅在 start_round 后 true。
+		return
+	gs.start_round()
+	# Apply container entries(client 第一次收到)
+	var containers: Dictionary = payload.get("containers", {})
+	for path in containers.keys():
+		var c = get_tree().root.get_node_or_null(NodePath(String(path)))
+		if c != null and c.has_method("apply_entries"):
+			c.apply_entries(containers[path])
+
+# host 在拿物品后,把单容器的最新 entries 推给所有 peer
+func broadcast_container_entries(container_path: String, wire_entries: Array) -> void:
+	if not is_host():
+		return
+	_rpc_apply_container_entries.rpc(container_path, wire_entries)
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_apply_container_entries(container_path: String, wire_entries: Array) -> void:
+	var c = get_tree().root.get_node_or_null(NodePath(container_path))
+	if c != null and c.has_method("apply_entries"):
+		c.apply_entries(wire_entries)
+
 # ---------- 公共 API ----------
 
 func set_local_ready(is_ready: bool) -> void:

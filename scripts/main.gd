@@ -41,7 +41,17 @@ func _ready() -> void:
 	var gs = get_node("/root/GameSession")
 	if not gs.round_started.is_connected(_on_round_started):
 		gs.round_started.connect(_on_round_started)
-	gs.start_round()
+	# Phase 2B:Round 启动 host-authoritative
+	#   单人 / 多人 host:本地 start_round 后 host 广播给 client(B2 加 container payload)
+	#   多人 client:不本地 start_round,等 mm._rpc_apply_round_start
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null or mm.is_single():
+		gs.start_round()
+	elif mm.is_host():
+		gs.start_round()
+		if mm.has_method("broadcast_round_start"):
+			mm.broadcast_round_start()
+	# client:wait for RPC
 
 	call_deferred("_verify_reachability")
 
@@ -108,9 +118,13 @@ func _on_round_started() -> void:
 		local_player.global_position = spawn_marker.global_position
 		if local_player.has_method("reset_motion"):
 			local_player.reset_motion()
-	for c in get_tree().get_nodes_in_group("containers"):
-		if c.has_method("reset_and_regenerate"):
-			c.reset_and_regenerate()
+	# Phase 2B:client 跳过 container 重置(entries 由 host RPC 同步,reset 会覆盖)
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	var is_client: bool = mm != null and mm.has_method("is_client") and mm.is_client()
+	if not is_client:
+		for c in get_tree().get_nodes_in_group("containers"):
+			if c.has_method("reset_and_regenerate"):
+				c.reset_and_regenerate()
 	for d in get_tree().get_nodes_in_group("doors"):
 		if d.has_method("reset_state"):
 			d.reset_state()

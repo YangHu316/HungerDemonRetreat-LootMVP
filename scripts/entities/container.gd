@@ -27,7 +27,14 @@ func _ready() -> void:
 	add_to_group("containers")
 	add_to_group("interactables")
 	_apply_visual()
-	_generate_contents()
+	# Phase 2B:多人 client 跳过本地生成,等 host 的 _rpc_apply_round_start 填充
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm != null and mm.has_method("is_client") and mm.is_client():
+		var gs: Vector2i = get_grid_size()
+		contents = GridInventory.new()
+		contents.setup(gs.x, gs.y)
+	else:
+		_generate_contents()
 	looted_label.visible = false
 	trigger_area.body_entered.connect(_on_body_entered)
 	trigger_area.body_exited.connect(_on_body_exited)
@@ -136,21 +143,74 @@ func _generate_contents() -> void:
 		table = load(_loot_table_path())
 	if table == null:
 		return
+	# Phase 2B:从 GameSession 取 round-scoped uid 计数器
+	var session = get_node_or_null("/root/GameSession")
 	var rolled: Array = (table as ContainerLootTable).roll(_rng)
 	for item in rolled:
 		var fit = GridPlacer.find_first_fit(contents, item)
 		if fit == null:
 			continue
+		var uid: int = -1
+		if session != null and session.has_method("next_entry_uid"):
+			uid = session.next_entry_uid()
 		var entry: Dictionary = {
+			"uid": uid,            # Phase 2B:host 分配 uid,wire 传输用
 			"item": item,
 			"x": fit[0],
 			"y": fit[1],
 			"rotated": fit[2],
+			"freshness_elapsed": 0.0,  # 食物变质 — wire 也传
 			"examined": false,
 			"inspected": false,
 			"inspecting": false,
 		}
 		contents.place(entry, fit[0], fit[1])
+
+# Phase 2B:把 contents.entries 序列化成 wire 格式(host → client)
+func serialize_entries() -> Array:
+	var out: Array = []
+	if contents == null:
+		return out
+	for e in contents.entries:
+		var item: ItemData = e.get("item", null)
+		out.append({
+			"uid": int(e.get("uid", -1)),
+			"item_path": item.resource_path if item != null else "",
+			"x": int(e.get("x", 0)),
+			"y": int(e.get("y", 0)),
+			"rotated": bool(e.get("rotated", false)),
+			"freshness_elapsed": float(e.get("freshness_elapsed", 0.0)),
+		})
+	return out
+
+# Phase 2B:从 wire 格式 apply(client 收 RPC 时调用)
+# 完全覆盖现有 contents,reload item 资源
+func apply_entries(wire_entries: Array) -> void:
+	var gs: Vector2i = get_grid_size()
+	if contents == null:
+		contents = GridInventory.new()
+	contents.cells.clear()
+	contents.entries.clear()
+	contents.setup(gs.x, gs.y)
+	for w in wire_entries:
+		var path: String = String(w.get("item_path", ""))
+		if path == "":
+			continue
+		var item: ItemData = load(path) as ItemData
+		if item == null:
+			continue
+		var entry: Dictionary = {
+			"uid": int(w.get("uid", -1)),
+			"item": item,
+			"x": int(w.get("x", 0)),
+			"y": int(w.get("y", 0)),
+			"rotated": bool(w.get("rotated", false)),
+			"freshness_elapsed": float(w.get("freshness_elapsed", 0.0)),
+			"examined": false,
+			"inspected": false,
+			"inspecting": false,
+		}
+		contents.place(entry, int(w.get("x", 0)), int(w.get("y", 0)))
 
 func reset_and_regenerate() -> void:
 	# 清空内容、重置状态、重新填充
