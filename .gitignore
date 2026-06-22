@@ -1,0 +1,29 @@
+# Godot 4 editor cache — clone 后自动重建
+.godot/
+.import/
+
+# Godot exports
+export.cfg
+*.translation
+
+# Claude Code 本地配置(含本机 Godot.exe 路径)
+.claude/
+
+# Godot MCP 调试日志 + 本地启动命令
+.godot-mcp/
+.mcp.json
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# Test artifacts
+test_results.xml
+
+# user:// 路径产物(运行时在 Windows AppData,正常不会进 repo,但兜底)
+logs/
+*.log

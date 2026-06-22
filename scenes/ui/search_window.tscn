@@ -1,0 +1,34 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/search_window.gd" id="1_sw"]
+
+[node name="SearchWindow" type="PopupPanel"]
+script = ExtResource("1_sw")
+size = Vector2i(480, 320)
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="Margin"]
+
+[node name="TitleLabel" type="Label" parent="Margin/VBox"]
+text = "搜刮"
+theme_override_font_sizes/font_size = 24
+
+[node name="HSep1" type="HSeparator" parent="Margin/VBox"]
+
+[node name="ItemList" type="VBoxContainer" parent="Margin/VBox"]
+size_flags_vertical = 3
+
+[node name="HSep2" type="HSeparator" parent="Margin/VBox"]
+
+[node name="FooterLabel" type="Label" parent="Margin/VBox"]
+text = "背包: 0.0/8.0 | 价值 0   [F] 全拾  [E/ESC] 关闭"
+theme_override_font_sizes/font_size = 14
+modulate = Color(0.7, 0.7, 0.7, 1)

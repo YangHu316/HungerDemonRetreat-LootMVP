@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/classes/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "coin"
+display_name = "金币"
+value = 35
+rarity = "Rare"
+color = Color(1.0, 0.816, 0.251, 1)
+grid_w = 1
+grid_h = 1

@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://shaders/floor_tiles.gdshader" id="1"]
+
+[resource]
+shader = ExtResource("1")
+shader_parameter/color_a = Color(0.36, 0.37, 0.40, 1)
+shader_parameter/color_b = Color(0.30, 0.31, 0.34, 1)
+shader_parameter/grout_color = Color(0.13, 0.13, 0.15, 1)
+shader_parameter/tile_size = Vector2(2.0, 2.0)
+shader_parameter/grout_width = 0.025
+shader_parameter/roughness_val = 0.85
+shader_parameter/metallic_val = 0.0
+shader_parameter/uv_scale = Vector2(1.0, 1.0)

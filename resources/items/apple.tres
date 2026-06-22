@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/classes/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "apple"
+display_name = "苹果"
+value = 5
+rarity = "Common"
+color = Color(0.361, 0.816, 0.361, 1)
+grid_w = 1
+grid_h = 1
+is_food = true

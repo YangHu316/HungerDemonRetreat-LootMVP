@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/classes/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "diamond"
+display_name = "钻石"
+value = 250
+rarity = "Epic"
+color = Color(0.357, 0.784, 1.0, 1)
+grid_w = 1
+grid_h = 1

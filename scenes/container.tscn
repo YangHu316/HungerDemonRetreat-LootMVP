@@ -1,0 +1,40 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/entities/container.gd" id="1"]
+
+[sub_resource type="BoxMesh" id="box_mesh"]
+size = Vector3(0.8, 0.4, 0.5)
+
+[sub_resource type="BoxShape3D" id="box_shape"]
+size = Vector3(0.8, 0.4, 0.5)
+
+[sub_resource type="SphereShape3D" id="sphere_shape"]
+radius = 1.5
+
+[node name="Container" type="Node3D"]
+script = ExtResource("1")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("box_mesh")
+
+[node name="Body" type="StaticBody3D" parent="."]
+collision_layer = 1
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Body"]
+shape = SubResource("box_shape")
+
+[node name="Trigger" type="Area3D" parent="."]
+collision_layer = 0
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Trigger"]
+shape = SubResource("sphere_shape")
+
+[node name="LootedLabel" type="Label3D" parent="."]
+text = "已搜别"
+position = Vector3(0, 1, 0)
+billboard = 1
+font_size = 32
+modulate = Color(0.8, 0.8, 0.8, 1)
+visible = false

@@ -1,0 +1,28 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/entities/extraction_zone.gd" id="1"]
+
+[sub_resource type="BoxMesh" id="ezbox"]
+size = Vector3(2.0, 0.1, 2.0)
+
+[sub_resource type="BoxShape3D" id="ezshape"]
+size = Vector3(2.0, 0.5, 2.0)
+
+[sub_resource type="StandardMaterial3D" id="ezmat"]
+albedo_color = Color(0.18, 0.76, 0.494, 0.5)
+emission_enabled = true
+emission = Color(0.18, 0.76, 0.494, 1)
+emission_energy_multiplier = 1.0
+transparency = 1
+
+[node name="ExtractionZone" type="Area3D"]
+script = ExtResource("1")
+collision_layer = 0
+collision_mask = 2
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("ezbox")
+material_override = SubResource("ezmat")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("ezshape")

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ContainerLootTable" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/classes/container_loot_table.gd" id="1"]
+[ext_resource type="Resource" path="res://resources/items/apple.tres" id="2"]
+[ext_resource type="Resource" path="res://resources/items/banana.tres" id="3"]
+[ext_resource type="Resource" path="res://resources/items/canned_food.tres" id="4"]
+[ext_resource type="Resource" path="res://resources/items/coin.tres" id="5"]
+[ext_resource type="Resource" path="res://resources/items/diamond.tres" id="6"]
+
+[resource]
+script = ExtResource("1")
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4"), ExtResource("5"), ExtResource("6")])
+weights = Array[float]([25.0, 30.0, 30.0, 12.0, 3.0])
+min_count = 2
+max_count = 3

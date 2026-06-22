@@ -1,0 +1,67 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/search_ui.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/ui/grid_panel.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/ui/magnifier_widget.gd" id="3"]
+
+[node name="SearchUI" type="CanvasLayer"]
+script = ExtResource("1")
+
+[node name="Root" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 0
+
+[node name="Background" type="ColorRect" parent="Root"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.7)
+mouse_filter = 1
+
+[node name="InventoryPanel" type="Control" parent="Root"]
+script = ExtResource("2")
+offset_left = 80.0
+offset_top = 80.0
+offset_right = 560.0
+offset_bottom = 560.0
+
+[node name="ContainerPanel" type="Control" parent="Root"]
+script = ExtResource("2")
+offset_left = 700.0
+offset_top = 80.0
+offset_right = 1100.0
+offset_bottom = 560.0
+
+[node name="SearchProgressBar" type="ProgressBar" parent="Root/ContainerPanel"]
+offset_left = 0.0
+offset_top = -32.0
+offset_right = 384.0
+offset_bottom = -8.0
+min_value = 0.0
+max_value = 1.0
+value = 0.0
+
+[node name="Magnifier" type="Control" parent="Root/ContainerPanel"]
+offset_left = 180.0
+offset_top = 440.0
+offset_right = 220.0
+offset_bottom = 480.0
+script = ExtResource("3")
+
+[node name="HelpLabel" type="Label" parent="Root"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -400.0
+offset_top = -50.0
+offset_right = 400.0
+offset_bottom = -16.0
+theme_override_font_sizes/font_size = 18
+horizontal_alignment = 1
+text = "[拖拽] 移动  [R] 旋转  [鼠标右键] 一键转移  [ESC] 关闭"
+
+[node name="DragLayer" type="Control" parent="Root"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2

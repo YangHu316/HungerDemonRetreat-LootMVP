@@ -1,0 +1,222 @@
+[gd_scene format=3 uid="uid://bgtko3he835ip"]
+
+[ext_resource type="Script" uid="uid://b7snr4jrwjpum" path="res://scripts/main.gd" id="1"]
+[ext_resource type="Script" uid="uid://dqtfqdn1ix8tm" path="res://scripts/entities/camera_rig.gd" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/container.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/extraction_zone.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="6"]
+[ext_resource type="PackedScene" path="res://scenes/search_ui.tscn" id="7"]
+[ext_resource type="PackedScene" path="res://scenes/result_panel.tscn" id="8"]
+[ext_resource type="Resource" path="res://resources/tuning/camera_default.tres" id="9"]
+[ext_resource type="PackedScene" path="res://scenes/extraction_progress_ui.tscn" id="10"]
+[ext_resource type="PackedScene" path="res://scenes/entities/player.tscn" id="12_player"]
+[ext_resource type="PackedScene" path="res://scenes/entities/door_assembly.tscn" id="13_door"]
+[ext_resource type="Material" path="res://materials/floor_main_hall.tres" id="20"]
+[ext_resource type="Material" path="res://materials/floor_bedroom.tres" id="21"]
+[ext_resource type="Material" path="res://materials/floor_storage.tres" id="22"]
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+sky_top_color = Color(0.18, 0.22, 0.32, 1)
+sky_horizon_color = Color(0.32, 0.36, 0.42, 1)
+ground_bottom_color = Color(0.1, 0.11, 0.13, 1)
+ground_horizon_color = Color(0.28, 0.28, 0.32, 1)
+
+[sub_resource type="Sky" id="sky_res"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env_res"]
+background_mode = 2
+sky = SubResource("sky_res")
+ambient_light_source = 3
+ambient_light_color = Color(0.65, 0.72, 0.82, 1)
+ambient_light_energy = 0.18
+tonemap_mode = 3
+ssao_enabled = true
+ssao_radius = 1.5
+ssao_intensity = 1.2
+glow_intensity = 0.6
+
+[sub_resource type="StandardMaterial3D" id="floor_base_mat"]
+albedo_color = Color(0.10196, 0.11373, 0.13333, 1)
+
+[sub_resource type="BoxMesh" id="floor_base_mesh"]
+size = Vector3(40, 0.1, 24)
+
+[sub_resource type="PlaneMesh" id="floor_main_mesh"]
+size = Vector2(16, 10)
+
+[sub_resource type="PlaneMesh" id="floor_bed_mesh"]
+size = Vector2(8, 8)
+
+[sub_resource type="PlaneMesh" id="floor_stor_mesh"]
+size = Vector2(8, 8)
+
+[sub_resource type="BoxShape3D" id="foundation_shape"]
+size = Vector3(40, 0.5, 24)
+
+[node name="Main" type="Node3D" unique_id=160400601]
+script = ExtResource("1")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1544864829]
+transform = Transform3D(0.8660254, 0.38302222, -0.32139382, 0, 0.64278764, 0.76604444, 0.5, -0.66341394, 0.5566704, 0, 8, 0)
+light_color = Color(1, 0.961, 0.878, 1)
+light_energy = 0.55
+shadow_enabled = true
+shadow_bias = 0.05
+shadow_normal_bias = 1.0
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1345481742]
+environment = SubResource("env_res")
+
+[node name="World" type="Node3D" parent="." unique_id=1173231036]
+
+[node name="Floors" type="Node3D" parent="World" unique_id=1732961206]
+
+[node name="BaseFloor" type="MeshInstance3D" parent="World/Floors" unique_id=831967854]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+material_override = SubResource("floor_base_mat")
+mesh = SubResource("floor_base_mesh")
+
+[node name="MainHallFloor" type="Node3D" parent="World/Floors" unique_id=1823075553]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.001, 4)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Floors/MainHallFloor" unique_id=1465794178]
+material_override = ExtResource("20")
+mesh = SubResource("floor_main_mesh")
+
+[node name="BedroomFloor" type="Node3D" parent="World/Floors" unique_id=1103677638]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0.001, -5)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Floors/BedroomFloor" unique_id=1510836058]
+material_override = ExtResource("21")
+mesh = SubResource("floor_bed_mesh")
+
+[node name="StorageFloor" type="Node3D" parent="World/Floors" unique_id=386499432]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0.001, -5)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Floors/StorageFloor" unique_id=1316990035]
+material_override = ExtResource("22")
+mesh = SubResource("floor_stor_mesh")
+
+[node name="Foundation" type="StaticBody3D" parent="World" unique_id=124696490]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+collision_mask = 0
+
+[node name="FoundationCollision" type="CollisionShape3D" parent="World/Foundation" unique_id=1428237580]
+shape = SubResource("foundation_shape")
+
+[node name="Walls" type="Node3D" parent="World" unique_id=1966649753]
+
+[node name="Lights" type="Node3D" parent="World" unique_id=2067870359]
+
+[node name="MainHallLight1" type="OmniLight3D" parent="World/Lights" unique_id=788116595]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 2.7, 4)
+light_color = Color(1, 0.965, 0.88, 1)
+light_energy = 1.5
+omni_range = 9.0
+
+[node name="MainHallLight2" type="OmniLight3D" parent="World/Lights" unique_id=370028651]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 2.7, 4)
+light_color = Color(1, 0.965, 0.88, 1)
+light_energy = 1.5
+omni_range = 9.0
+
+[node name="BedroomLight" type="OmniLight3D" parent="World/Lights" unique_id=690131021]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 2.7, -5)
+light_color = Color(1, 0.851, 0.604, 1)
+light_energy = 2.0
+omni_range = 7.0
+
+[node name="StorageLight" type="OmniLight3D" parent="World/Lights" unique_id=219987884]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 2.7, -5)
+light_color = Color(0.753, 0.831, 1, 1)
+light_energy = 1.6
+omni_range = 7.0
+
+[node name="ExtractionGlow" type="OmniLight3D" parent="World/Lights" unique_id=1107280140]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.8, 1, 4)
+light_color = Color(0.18, 0.76, 0.494, 1)
+light_energy = 4.0
+
+[node name="ContainerLights" type="Node3D" parent="World" unique_id=441136738]
+
+[node name="Spot_MH_Drawer" type="SpotLight3D" parent="World/ContainerLights" unique_id=1145889740]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, -4, 2.5, 6)
+light_color = Color(1, 0.95, 0.85, 1)
+light_energy = 1.6
+spot_range = 4.0
+spot_angle = 35.0
+
+[node name="Spot_MH_Cabinet" type="SpotLight3D" parent="World/ContainerLights" unique_id=210028335]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 7, 2.5, 0.5)
+light_color = Color(1, 0.95, 0.85, 1)
+light_energy = 1.6
+spot_range = 4.0
+spot_angle = 35.0
+
+[node name="Spot_BR_Drawer" type="SpotLight3D" parent="World/ContainerLights" unique_id=370936039]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, -7, 2.5, -8.5)
+light_color = Color(1, 0.85, 0.6, 1)
+light_energy = 1.6
+spot_range = 4.0
+spot_angle = 35.0
+
+[node name="Spot_ST_Safe" type="SpotLight3D" parent="World/ContainerLights" unique_id=1484520071]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 6.5, 2.5, -7.5)
+light_color = Color(0.85, 0.95, 1, 1)
+light_energy = 2.0
+spot_range = 4.5
+spot_angle = 35.0
+
+[node name="Containers" type="Node3D" parent="World" unique_id=2000904710]
+
+[node name="MainHall_Drawer" parent="World/Containers" unique_id=1663555983 instance=ExtResource("4")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 6)
+
+[node name="MainHall_Cabinet" parent="World/Containers" unique_id=1285225576 instance=ExtResource("4")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0.5)
+type = 1
+
+[node name="Bedroom_Drawer" parent="World/Containers" unique_id=1231189586 instance=ExtResource("4")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 0, -8.5)
+
+[node name="Storage_Safe" parent="World/Containers" unique_id=728664716 instance=ExtResource("4")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.5, 0, -7.5)
+type = 2
+
+[node name="ExtractionZone" parent="World" unique_id=373131071 groups=["extraction_zone"] instance=ExtResource("5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.8, 0.05, 4)
+
+[node name="Doors" type="Node3D" parent="World" unique_id=827480196]
+
+[node name="DoorBedroom" parent="World/Doors" unique_id=254293471 instance=ExtResource("13_door")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -1)
+
+[node name="DoorStorage" parent="World/Doors" unique_id=51902698 instance=ExtResource("13_door")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, -1)
+
+[node name="Decor" type="Node3D" parent="World" unique_id=577336472]
+
+[node name="PlayerSpawn" type="Marker3D" parent="World" unique_id=1973754304]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 1, 7.8)
+
+[node name="Player" parent="." unique_id=2072965128 instance=ExtResource("12_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 1, 7.8)
+
+[node name="CameraRig" type="Node3D" parent="." unique_id=1816152543]
+script = ExtResource("3")
+tuning = ExtResource("9")
+
+[node name="YawRoot" type="Node3D" parent="CameraRig" unique_id=393082466]
+
+[node name="PitchRoot" type="Node3D" parent="CameraRig/YawRoot" unique_id=1246531602]
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig/YawRoot/PitchRoot" unique_id=1921116164]
+
+[node name="HUD" parent="." unique_id=105342383 instance=ExtResource("6")]
+
+[node name="SearchUI" parent="." unique_id=1165235965 instance=ExtResource("7")]
+
+[node name="ResultPanel" parent="." unique_id=311433407 instance=ExtResource("8")]
+
+[node name="ExtractionProgressUI" parent="." unique_id=381253147 instance=ExtResource("10")]

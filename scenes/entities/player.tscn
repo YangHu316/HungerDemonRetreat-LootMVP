@@ -1,0 +1,452 @@
+[gd_scene load_steps=54 format=3]
+
+[ext_resource type="Script" path="res://scripts/entities/player.gd" id="1_player"]
+[ext_resource type="Shader" path="res://shaders/shadow_blob.gdshader" id="2_shader"]
+
+[sub_resource type="CapsuleShape3D" id="player_shape"]
+radius = 0.35
+height = 1.4
+
+[sub_resource type="PlaneMesh" id="shadow_mesh"]
+size = Vector2(1.0, 1.0)
+
+[sub_resource type="ShaderMaterial" id="shadow_mat"]
+shader = ExtResource("2_shader")
+
+[sub_resource type="CapsuleMesh" id="torso_mesh"]
+radius = 0.26
+height = 0.65
+
+[sub_resource type="StandardMaterial3D" id="torso_mat"]
+albedo_color = Color(1.0, 0.764, 0.227, 1)
+roughness = 0.65
+
+[sub_resource type="CapsuleMesh" id="torso_outline_mesh"]
+radius = 0.275
+height = 0.68
+
+[sub_resource type="StandardMaterial3D" id="torso_outline_mat"]
+shading_mode = 0
+cull_mode = 1
+albedo_color = Color(0.8, 0.616, 0.0, 1)
+
+[sub_resource type="CapsuleMesh" id="pants_mesh"]
+radius = 0.24
+height = 0.40
+
+[sub_resource type="StandardMaterial3D" id="pants_mat"]
+albedo_color = Color(0.102, 0.102, 0.102, 1)
+roughness = 0.7
+
+[sub_resource type="SphereMesh" id="head_mesh"]
+radius = 0.30
+height = 0.60
+
+[sub_resource type="StandardMaterial3D" id="head_mat"]
+albedo_color = Color(0.99, 0.85, 0.72, 1)
+roughness = 0.55
+
+[sub_resource type="SphereMesh" id="head_outline_mesh"]
+radius = 0.32
+height = 0.64
+
+[sub_resource type="StandardMaterial3D" id="head_outline_mat"]
+shading_mode = 0
+cull_mode = 1
+albedo_color = Color(0.05, 0.05, 0.08, 1)
+
+[sub_resource type="SphereMesh" id="eye_white_mesh"]
+radius = 0.06
+height = 0.12
+
+[sub_resource type="StandardMaterial3D" id="eye_white_mat"]
+shading_mode = 0
+albedo_color = Color(1, 1, 1, 1)
+
+[sub_resource type="SphereMesh" id="pupil_mesh"]
+radius = 0.028
+height = 0.056
+
+[sub_resource type="StandardMaterial3D" id="pupil_mat"]
+shading_mode = 0
+albedo_color = Color(0.05, 0.05, 0.05, 1)
+
+[sub_resource type="CapsuleMesh" id="mouth_mesh"]
+radius = 0.012
+height = 0.10
+
+[sub_resource type="StandardMaterial3D" id="mouth_mat"]
+shading_mode = 0
+albedo_color = Color(0.60, 0.25, 0.25, 1)
+
+[sub_resource type="CapsuleMesh" id="arm_mesh"]
+radius = 0.07
+height = 0.50
+
+[sub_resource type="StandardMaterial3D" id="arm_mat"]
+albedo_color = Color(1.0, 0.764, 0.227, 1)
+roughness = 0.65
+
+[sub_resource type="SphereMesh" id="hand_mesh"]
+radius = 0.09
+height = 0.18
+
+[sub_resource type="StandardMaterial3D" id="hand_mat"]
+albedo_color = Color(0.102, 0.102, 0.102, 1)
+roughness = 0.55
+
+[sub_resource type="CapsuleMesh" id="leg_mesh"]
+radius = 0.09
+height = 0.50
+
+[sub_resource type="StandardMaterial3D" id="leg_mat"]
+albedo_color = Color(0.102, 0.102, 0.102, 1)
+roughness = 0.7
+
+[sub_resource type="CapsuleMesh" id="boot_mesh"]
+radius = 0.10
+height = 0.20
+
+[sub_resource type="StandardMaterial3D" id="boot_mat"]
+albedo_color = Color(0.10, 0.08, 0.06, 1)
+roughness = 0.6
+
+; ─── v10 §4 美团外卖小哥外形 ────────────────
+[sub_resource type="CylinderMesh" id="collar_mesh"]
+top_radius = 0.18
+bottom_radius = 0.20
+height = 0.06
+
+[sub_resource type="StandardMaterial3D" id="collar_mat"]
+albedo_color = Color(1, 1, 1, 1)
+roughness = 0.6
+
+[sub_resource type="SphereMesh" id="helmet_shell_mesh"]
+radius = 0.31
+height = 0.62
+
+[sub_resource type="StandardMaterial3D" id="helmet_shell_mat"]
+albedo_color = Color(1.0, 0.764, 0.227, 1)
+roughness = 0.4
+
+[sub_resource type="SphereMesh" id="helmet_outline_mesh"]
+radius = 0.32
+height = 0.64
+
+[sub_resource type="StandardMaterial3D" id="helmet_outline_mat"]
+shading_mode = 0
+cull_mode = 1
+albedo_color = Color(0.690, 0.533, 0.0, 1)
+
+[sub_resource type="CylinderMesh" id="helmet_brim_mesh"]
+top_radius = 0.32
+bottom_radius = 0.32
+height = 0.04
+
+[sub_resource type="StandardMaterial3D" id="helmet_brim_mat"]
+albedo_color = Color(1.0, 0.764, 0.227, 1)
+roughness = 0.45
+
+[sub_resource type="BoxMesh" id="chin_strap_mesh"]
+size = Vector3(0.04, 0.18, 0.02)
+
+[sub_resource type="StandardMaterial3D" id="chin_strap_mat"]
+albedo_color = Color(0.102, 0.102, 0.102, 1)
+roughness = 0.7
+
+[sub_resource type="BoxMesh" id="logo_m_stem_mesh"]
+size = Vector3(0.025, 0.10, 0.005)
+
+[sub_resource type="BoxMesh" id="logo_m_diag_mesh"]
+size = Vector3(0.025, 0.07, 0.005)
+
+[sub_resource type="StandardMaterial3D" id="logo_white_unshaded_mat"]
+shading_mode = 0
+albedo_color = Color(1, 1, 1, 1)
+
+; ─── DeliveryBox ────────────────
+[sub_resource type="BoxMesh" id="box_body_mesh"]
+size = Vector3(0.55, 0.65, 0.45)
+
+[sub_resource type="StandardMaterial3D" id="box_body_mat"]
+albedo_color = Color(1.0, 0.843, 0.0, 1)
+roughness = 0.35
+
+[sub_resource type="BoxMesh" id="box_outline_mesh"]
+size = Vector3(0.58, 0.68, 0.48)
+
+[sub_resource type="StandardMaterial3D" id="box_outline_mat"]
+shading_mode = 0
+cull_mode = 1
+albedo_color = Color(0.690, 0.533, 0.0, 1)
+
+[sub_resource type="BoxMesh" id="box_frame_top_mesh"]
+size = Vector3(0.56, 0.04, 0.46)
+
+[sub_resource type="StandardMaterial3D" id="box_black_mat"]
+albedo_color = Color(0.102, 0.102, 0.102, 1)
+roughness = 0.5
+
+[sub_resource type="BoxMesh" id="box_strap_mesh"]
+size = Vector3(0.04, 0.5, 0.02)
+
+[sub_resource type="BoxMesh" id="logo_box_stem_mesh"]
+size = Vector3(0.04, 0.18, 0.005)
+
+[sub_resource type="BoxMesh" id="logo_box_diag_mesh"]
+size = Vector3(0.04, 0.12, 0.005)
+
+[sub_resource type="CylinderMesh" id="box_latch_mesh"]
+top_radius = 0.025
+bottom_radius = 0.025
+height = 0.04
+
+[sub_resource type="StandardMaterial3D" id="box_latch_mat"]
+albedo_color = Color(0.165, 0.165, 0.165, 1)
+roughness = 0.5
+
+[node name="Player" type="CharacterBody3D" groups=["player"]]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_player")
+anim_test_mode = false
+arm_swing_sign = -1.0
+leg_swing_sign = -1.0
+arm_lift_sign = -1.0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("player_shape")
+
+[node name="ShadowBlob" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
+mesh = SubResource("shadow_mesh")
+material_override = SubResource("shadow_mat")
+cast_shadow = 0
+
+[node name="BodyRoot" type="Node3D" parent="."]
+
+[node name="Torso" type="MeshInstance3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.30, 0)
+mesh = SubResource("torso_mesh")
+material_override = SubResource("torso_mat")
+
+[node name="TorsoOutline" type="MeshInstance3D" parent="BodyRoot"]
+transform = Transform3D(1.06, 0, 0, 0, 1.06, 0, 0, 0, 1.06, 0, 0.30, 0)
+mesh = SubResource("torso_outline_mesh")
+material_override = SubResource("torso_outline_mat")
+cast_shadow = 0
+
+[node name="Collar" type="MeshInstance3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.97, 0)
+mesh = SubResource("collar_mesh")
+material_override = SubResource("collar_mat")
+
+[node name="Pants" type="MeshInstance3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.10, 0)
+mesh = SubResource("pants_mesh")
+material_override = SubResource("pants_mat")
+
+[node name="Head" type="MeshInstance3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1.1, 0, 0, 0, 0.95, 0, 0.78, 0)
+mesh = SubResource("head_mesh")
+material_override = SubResource("head_mat")
+
+[node name="HeadOutline" type="MeshInstance3D" parent="BodyRoot"]
+transform = Transform3D(1.06, 0, 0, 0, 1.166, 0, 0, 0, 1.007, 0, 0.78, 0)
+mesh = SubResource("head_outline_mesh")
+material_override = SubResource("head_outline_mat")
+cast_shadow = 0
+
+; ─── v10 §4 Helmet（替代 Hair）────────────────
+[node name="Helmet" type="Node3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.00, 0)
+
+[node name="HelmetShell" type="MeshInstance3D" parent="BodyRoot/Helmet"]
+transform = Transform3D(1.0, 0, 0, 0, 0.85, 0, 0, 0, 1.05, 0, 0, 0)
+mesh = SubResource("helmet_shell_mesh")
+material_override = SubResource("helmet_shell_mat")
+
+[node name="HelmetOutline" type="MeshInstance3D" parent="BodyRoot/Helmet"]
+transform = Transform3D(1.0, 0, 0, 0, 0.85, 0, 0, 0, 1.05, 0, 0, 0)
+mesh = SubResource("helmet_outline_mesh")
+material_override = SubResource("helmet_outline_mat")
+cast_shadow = 0
+
+[node name="HelmetBrim" type="MeshInstance3D" parent="BodyRoot/Helmet"]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -0.4, 0, 1, -1.74846e-08, 0, -0.04, 0.18)
+mesh = SubResource("helmet_brim_mesh")
+material_override = SubResource("helmet_brim_mat")
+
+[node name="ChinStrapL" type="MeshInstance3D" parent="BodyRoot/Helmet"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.22, -0.16, 0.05)
+mesh = SubResource("chin_strap_mesh")
+material_override = SubResource("chin_strap_mat")
+
+[node name="ChinStrapR" type="MeshInstance3D" parent="BodyRoot/Helmet"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.22, -0.16, 0.05)
+mesh = SubResource("chin_strap_mesh")
+material_override = SubResource("chin_strap_mat")
+
+[node name="LogoM_Stem1" type="MeshInstance3D" parent="BodyRoot/Helmet"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.05, 0.02, 0.30)
+mesh = SubResource("logo_m_stem_mesh")
+material_override = SubResource("logo_white_unshaded_mat")
+cast_shadow = 0
+
+[node name="LogoM_Stem2" type="MeshInstance3D" parent="BodyRoot/Helmet"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.05, 0.02, 0.30)
+mesh = SubResource("logo_m_stem_mesh")
+material_override = SubResource("logo_white_unshaded_mat")
+cast_shadow = 0
+
+[node name="LogoM_Diag1" type="MeshInstance3D" parent="BodyRoot/Helmet"]
+transform = Transform3D(0.9397, 0.342, 0, -0.342, 0.9397, 0, 0, 0, 1, -0.025, 0.05, 0.30)
+mesh = SubResource("logo_m_diag_mesh")
+material_override = SubResource("logo_white_unshaded_mat")
+cast_shadow = 0
+
+[node name="LogoM_Diag2" type="MeshInstance3D" parent="BodyRoot/Helmet"]
+transform = Transform3D(0.9397, -0.342, 0, 0.342, 0.9397, 0, 0, 0, 1, 0.025, 0.05, 0.30)
+mesh = SubResource("logo_m_diag_mesh")
+material_override = SubResource("logo_white_unshaded_mat")
+cast_shadow = 0
+
+[node name="EyeWhiteL" type="MeshInstance3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.10, 0.82, -0.22)
+mesh = SubResource("eye_white_mesh")
+material_override = SubResource("eye_white_mat")
+cast_shadow = 0
+
+[node name="EyeWhiteR" type="MeshInstance3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.10, 0.82, -0.22)
+mesh = SubResource("eye_white_mesh")
+material_override = SubResource("eye_white_mat")
+cast_shadow = 0
+
+[node name="PupilL" type="MeshInstance3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.10, 0.82, -0.27)
+mesh = SubResource("pupil_mesh")
+material_override = SubResource("pupil_mat")
+cast_shadow = 0
+
+[node name="PupilR" type="MeshInstance3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.10, 0.82, -0.27)
+mesh = SubResource("pupil_mesh")
+material_override = SubResource("pupil_mat")
+cast_shadow = 0
+
+[node name="Mouth" type="MeshInstance3D" parent="BodyRoot"]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0, 0.70, -0.28)
+mesh = SubResource("mouth_mesh")
+material_override = SubResource("mouth_mat")
+cast_shadow = 0
+
+[node name="ArmL" type="Node3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.34, 0.50, 0)
+
+[node name="ArmLMesh" type="MeshInstance3D" parent="BodyRoot/ArmL"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.20, 0)
+mesh = SubResource("arm_mesh")
+material_override = SubResource("arm_mat")
+
+[node name="HandL" type="MeshInstance3D" parent="BodyRoot/ArmL"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.42, 0)
+mesh = SubResource("hand_mesh")
+material_override = SubResource("hand_mat")
+
+[node name="ArmR" type="Node3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.34, 0.50, 0)
+
+[node name="ArmRMesh" type="MeshInstance3D" parent="BodyRoot/ArmR"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.20, 0)
+mesh = SubResource("arm_mesh")
+material_override = SubResource("arm_mat")
+
+[node name="HandR" type="MeshInstance3D" parent="BodyRoot/ArmR"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.42, 0)
+mesh = SubResource("hand_mesh")
+material_override = SubResource("hand_mat")
+
+[node name="LegL" type="Node3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.13, -0.20, 0)
+
+[node name="LegLMesh" type="MeshInstance3D" parent="BodyRoot/LegL"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.15, 0)
+mesh = SubResource("leg_mesh")
+material_override = SubResource("leg_mat")
+
+[node name="BootL" type="MeshInstance3D" parent="BodyRoot/LegL"]
+transform = Transform3D(1.4, 0, 0, 0, 0.6, 0, 0, 0, 1.6, 0, -0.32, 0.04)
+mesh = SubResource("boot_mesh")
+material_override = SubResource("boot_mat")
+
+[node name="LegR" type="Node3D" parent="BodyRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.13, -0.20, 0)
+
+[node name="LegRMesh" type="MeshInstance3D" parent="BodyRoot/LegR"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.15, 0)
+mesh = SubResource("leg_mesh")
+material_override = SubResource("leg_mat")
+
+[node name="BootR" type="MeshInstance3D" parent="BodyRoot/LegR"]
+transform = Transform3D(1.4, 0, 0, 0, 0.6, 0, 0, 0, 1.6, 0, -0.32, 0.04)
+mesh = SubResource("boot_mesh")
+material_override = SubResource("boot_mat")
+
+; ─── v10 §4 DeliveryBox（替代 Backpack）────────────────
+; v11 fix §2：箱子挂到角色背后（+Z 侧），并整体绕 Y 旋转 180° 让 M Logo / 锁扣朝外
+[node name="DeliveryBox" type="Node3D" parent="BodyRoot"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0.50, 0.38)
+
+[node name="BoxBody" type="MeshInstance3D" parent="BodyRoot/DeliveryBox"]
+mesh = SubResource("box_body_mesh")
+material_override = SubResource("box_body_mat")
+
+[node name="BoxOutline" type="MeshInstance3D" parent="BodyRoot/DeliveryBox"]
+mesh = SubResource("box_outline_mesh")
+material_override = SubResource("box_outline_mat")
+cast_shadow = 0
+
+[node name="BoxFrameTop" type="MeshInstance3D" parent="BodyRoot/DeliveryBox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32, 0)
+mesh = SubResource("box_frame_top_mesh")
+material_override = SubResource("box_black_mat")
+
+[node name="BoxStrapL" type="MeshInstance3D" parent="BodyRoot/DeliveryBox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.2, -0.05, 0.22)
+mesh = SubResource("box_strap_mesh")
+material_override = SubResource("box_black_mat")
+
+[node name="BoxStrapR" type="MeshInstance3D" parent="BodyRoot/DeliveryBox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.2, -0.05, 0.22)
+mesh = SubResource("box_strap_mesh")
+material_override = SubResource("box_black_mat")
+
+[node name="LogoBoxM_Stem1" type="MeshInstance3D" parent="BodyRoot/DeliveryBox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.08, 0, -0.23)
+mesh = SubResource("logo_box_stem_mesh")
+material_override = SubResource("logo_white_unshaded_mat")
+cast_shadow = 0
+
+[node name="LogoBoxM_Stem2" type="MeshInstance3D" parent="BodyRoot/DeliveryBox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08, 0, -0.23)
+mesh = SubResource("logo_box_stem_mesh")
+material_override = SubResource("logo_white_unshaded_mat")
+cast_shadow = 0
+
+[node name="LogoBoxM_Diag1" type="MeshInstance3D" parent="BodyRoot/DeliveryBox"]
+transform = Transform3D(0.9397, 0.342, 0, -0.342, 0.9397, 0, 0, 0, 1, -0.04, 0.05, -0.23)
+mesh = SubResource("logo_box_diag_mesh")
+material_override = SubResource("logo_white_unshaded_mat")
+cast_shadow = 0
+
+[node name="LogoBoxM_Diag2" type="MeshInstance3D" parent="BodyRoot/DeliveryBox"]
+transform = Transform3D(0.9397, -0.342, 0, 0.342, 0.9397, 0, 0, 0, 1, 0.04, 0.05, -0.23)
+mesh = SubResource("logo_box_diag_mesh")
+material_override = SubResource("logo_white_unshaded_mat")
+cast_shadow = 0
+
+[node name="BoxLatch" type="MeshInstance3D" parent="BodyRoot/DeliveryBox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, -0.23)
+mesh = SubResource("box_latch_mesh")
+material_override = SubResource("box_latch_mat")

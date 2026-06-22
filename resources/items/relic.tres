@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/classes/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "relic"
+display_name = "古董"
+value = 500
+rarity = "Legendary"
+color = Color(0.714, 0.357, 1.0, 1)
+grid_w = 2
+grid_h = 3

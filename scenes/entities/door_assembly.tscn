@@ -1,0 +1,50 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/entities/door.gd" id="1_door"]
+
+[sub_resource type="BoxMesh" id="door_mesh"]
+size = Vector3(1.2, 2.2, 0.08)
+
+[sub_resource type="StandardMaterial3D" id="door_mat"]
+albedo_color = Color(0.45, 0.30, 0.18, 1)
+roughness = 0.7
+
+[sub_resource type="BoxShape3D" id="door_shape"]
+size = Vector3(1.2, 2.0, 0.15)
+
+[sub_resource type="SphereShape3D" id="interact_shape"]
+radius = 1.6
+
+[node name="DoorAssembly" type="Node3D"]
+
+[node name="Door" type="StaticBody3D" parent="."]
+script = ExtResource("1_door")
+collision_layer = 1
+collision_mask = 0
+
+[node name="DoorCollision" type="CollisionShape3D" parent="Door"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+shape = SubResource("door_shape")
+disabled = false
+
+[node name="DoorPivot" type="Node3D" parent="Door"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 0, 0)
+
+[node name="DoorPanel" type="MeshInstance3D" parent="Door/DoorPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 1.1, 0)
+mesh = SubResource("door_mesh")
+material_override = SubResource("door_mat")
+
+[node name="Handle" type="MeshInstance3D" parent="Door/DoorPivot"]
+transform = Transform3D(0.05, 0, 0, 0, 0.05, 0, 0, 0, 0.05, 1.1, 1.1, 0.06)
+mesh = SubResource("door_mesh")
+
+[node name="InteractArea" type="Area3D" parent="."]
+collision_layer = 0
+collision_mask = 2
+monitoring = true
+monitorable = false
+
+[node name="InteractShape" type="CollisionShape3D" parent="InteractArea"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+shape = SubResource("interact_shape")

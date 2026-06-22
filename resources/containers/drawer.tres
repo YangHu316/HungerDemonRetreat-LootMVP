@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ContainerData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/classes/container_data.gd" id="1"]
+[ext_resource type="Resource" path="res://resources/loot_tables/drawer_loot.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+container_type = "drawer"
+search_time = 1.5
+grid_cols = 2
+grid_rows = 2
+loot_table = ExtResource("2")

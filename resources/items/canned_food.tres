@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/classes/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "canned_food"
+display_name = "罐头"
+value = 25
+rarity = "Uncommon"
+color = Color(0.659, 0.482, 0.227, 1)
+grid_w = 1
+grid_h = 1
+is_food = true

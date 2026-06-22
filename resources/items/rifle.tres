@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/classes/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "rifle"
+display_name = "步枪"
+value = 200
+rarity = "Rare"
+color = Color(0.353, 0.353, 0.353, 1)
+grid_w = 4
+grid_h = 1
