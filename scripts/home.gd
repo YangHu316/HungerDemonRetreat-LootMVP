@@ -57,6 +57,19 @@ func _build_ui() -> void:
 	title.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(title)
 
+	# 右上角"返回主菜单"按钮(锚定在屏幕右上)
+	var menu_btn := Button.new()
+	menu_btn.text = "← 主菜单"
+	menu_btn.add_theme_font_size_override("font_size", 14)
+	menu_btn.anchor_left = 1.0
+	menu_btn.anchor_right = 1.0
+	menu_btn.offset_left = -120
+	menu_btn.offset_right = -16
+	menu_btn.offset_top = 16
+	menu_btn.offset_bottom = 44
+	menu_btn.pressed.connect(_on_back_to_menu)
+	add_child(menu_btn)
+
 	# 订单区(在标题和网格之间)
 	var order_hbox := HBoxContainer.new()
 	order_hbox.add_theme_constant_override("separation", 24)
@@ -396,6 +409,10 @@ func _flash_red(view: Control) -> void:
 
 func _on_enter() -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
+
+func _on_back_to_menu() -> void:
+	# 切回主菜单 — 不清 stash/inventory(玩家的存档保留)
+	get_tree().change_scene_to_file("res://scenes/menu.tscn")
 
 func _on_accept_order() -> void:
 	var pool = get_node("/root/OrderPool")

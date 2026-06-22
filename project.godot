@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="HungerDemonRetreat_LootMVP"
-run/main_scene="res://scenes/home.tscn"
+run/main_scene="res://scenes/menu.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -23,7 +23,6 @@ PlayerInventory="*res://scripts/autoloads/player_inventory.gd"
 Stamina="*res://scripts/autoloads/stamina.gd"
 Logger="*res://scripts/utils/logger.gd"
 Stash="*res://scripts/autoloads/stash.gd"
-OrderPool="*res://scripts/autoloads/order_pool.gd"
 OrderPool="*res://scripts/autoloads/order_pool.gd"
 
 [display]
