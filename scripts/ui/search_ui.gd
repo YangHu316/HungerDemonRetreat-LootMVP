@@ -186,7 +186,7 @@ func _on_item_double_clicked(entry: Dictionary, panel: GridPanel) -> void:
 	# 先预探测目标位置（不修改源）
 	var fit = GridPlacer.find_first_fit(dst.grid, item)
 	if fit == null:
-		var v: Control = panel.item_views.get(entry, null)
+		var v: Control = panel.get_view_for_entry(entry)
 		if v != null and is_instance_valid(v):
 			_flash_red(v)
 		return
@@ -376,6 +376,11 @@ func _try_drop() -> void:
 	var local: Vector2 = mouse_global - p.grid_origin_global()
 	var cx: int = int(floor(local.x / CELL)) - int(w / 2)
 	var cy: int = int(floor(local.y / CELL)) - int(h / 2)
+	# §双击防误触:在源 panel 同位置同朝向放下 = 用户没移动鼠标(双击的第一次 release)
+	# → 等同放弃这次拖拽,不发 item_moved,避免视觉抖动和 log 噪音
+	if p == _drag.from_panel and cx == _drag.original_x and cy == _drag.original_y and rot == _drag.original_rotated:
+		_cancel_drag()
+		return
 	if not p.grid.can_place(item, cx, cy, rot, null):
 		# 落点非法 → 放回原位
 		_cancel_drag()
@@ -408,7 +413,7 @@ func _quick_transfer(entry: Dictionary, panel: GridPanel) -> void:
 	var item: ItemData = entry["item"]
 	var fit = GridPlacer.find_first_fit(dst.grid, item)
 	if fit == null:
-		var v: Control = panel.item_views.get(entry, null)
+		var v: Control = panel.get_view_for_entry(entry)
 		if v != null and is_instance_valid(v):
 			_flash_red(v)
 		return

@@ -27,3 +27,59 @@ func test_remove_entry_must_not_clear_last_click() -> void:
 	var body: String = src.substr(i, j - i)
 	assert_false(body.contains("_last_click_entry = {}"),
 		"remove_entry 不能清 _last_click_entry,否则双击拾取坏")
+
+func test_process_guards_null_grid() -> void:
+	# regression 防御:2026-06-22 freshness 1s 重绘块加入 _process 时漏了 null 守卫,
+	# 导致 search_ui 里的 GridPanel 在 setup() 调用前每帧炸 Nil.entries
+	var src: String = load("res://scripts/ui/grid_panel.gd").source_code
+	var i: int = src.find("func _process")
+	assert_gte(i, 0, "应有 _process 函数")
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0:
+		j = src.length()
+	var body: String = src.substr(i, j - i)
+	# _process 必须在访问 grid.entries / item_views 之前 early-return
+	# 简单检查:函数体里出现 "if grid == null" 或 "if grid != null"(全包式)
+	var has_null_guard: bool = body.contains("if grid == null") or body.contains("if grid != null")
+	assert_true(has_null_guard,
+		"_process 必须有 grid 是否 null 的守卫,否则 search_ui 里没 setup 的 GridPanel 会炸")
+
+func test_update_value_label_guards_null_grid() -> void:
+	# 同上根因:_update_value_label 也访问 grid.entries,被 _process 调用前必须自防
+	var src: String = load("res://scripts/ui/grid_panel.gd").source_code
+	var i: int = src.find("func _update_value_label")
+	assert_gte(i, 0)
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0:
+		j = src.length()
+	var body: String = src.substr(i, j - i)
+	assert_true(body.contains("grid == null") or body.contains("grid != null"),
+		"_update_value_label 必须有 grid null 守卫")
+
+func test_process_guards_null_grid() -> void:
+	# regression 防御:2026-06-22 freshness 1s 重绘块加入 _process 时漏了 null 守卫,
+	# 导致 search_ui 里的 GridPanel 在 setup() 调用前每帧炸 Nil.entries
+	var src: String = load("res://scripts/ui/grid_panel.gd").source_code
+	var i: int = src.find("func _process")
+	assert_gte(i, 0, "应有 _process 函数")
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0:
+		j = src.length()
+	var body: String = src.substr(i, j - i)
+	# _process 必须在访问 grid.entries / item_views 之前 early-return
+	# 简单检查:函数体里出现 "if grid == null" 或 "if grid != null"(全包式)
+	var has_null_guard: bool = body.contains("if grid == null") or body.contains("if grid != null")
+	assert_true(has_null_guard,
+		"_process 必须有 grid 是否 null 的守卫,否则 search_ui 里没 setup 的 GridPanel 会炸")
+
+func test_update_value_label_guards_null_grid() -> void:
+	# 同上根因:_update_value_label 也访问 grid.entries,被 _process 调用前必须自防
+	var src: String = load("res://scripts/ui/grid_panel.gd").source_code
+	var i: int = src.find("func _update_value_label")
+	assert_gte(i, 0)
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0:
+		j = src.length()
+	var body: String = src.substr(i, j - i)
+	assert_true(body.contains("grid == null") or body.contains("grid != null"),
+		"_update_value_label 必须有 grid null 守卫")

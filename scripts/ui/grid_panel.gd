@@ -12,7 +12,19 @@ const DOUBLE_CLICK_MS: int = 300
 @export var grid_id: String = "inventory"
 
 var grid: GridInventory
-var item_views: Dictionary = {}  # entry -> GridItemView
+var item_views: Dictionary = {}  # int uid -> GridItemView
+# 给 entry 分配稳定 uid 用作 item_views 的 key。
+# 不能直接用 entry Dictionary 作 key —— Godot 4 Dictionary key 用 content hash,
+# entry 的 x/y/rotated 在拖拽中会变,导致 hash 不一致、has/erase 失效,旧 view 不被
+# free → 屏幕累积"幽灵 view",肉眼看像物品被复制(2026-06-22 用户报"4个面包")。
+const _UID_KEY := "_grid_uid"
+var _uid_counter: int = 0
+
+func _entry_uid(entry: Dictionary) -> int:
+	if not entry.has(_UID_KEY):
+		_uid_counter += 1
+		entry[_UID_KEY] = _uid_counter
+	return int(entry[_UID_KEY])
 var _bg: Control
 var _items_container: Control
 var _overlay: Control  # 用于绘制 inspecting 的放大镜+圆环
@@ -101,20 +113,14 @@ func _draw_bg() -> void:
 
 func _process(delta: float) -> void:
 	_anim_time += delta
+	# setup() 还没被调用前 grid 是 null —— 直接退出,避免后续访问 grid.entries 炸
+	if grid == null:
+		return
 	# 仅在有 inspecting 时重绘 overlay
-	if grid != null:
-		for e in grid.entries:
-			if e.get("inspecting", false):
-				_overlay.queue_redraw()
-				break
-	# 每秒刷一次 freshness 边框 + value label(背包格才动,仓库不变质所以也只是浪费一次绘制)
-	_fresh_redraw_accum += delta
-	if _fresh_redraw_accum >= 1.0:
-		_fresh_redraw_accum = 0.0
-		for v in item_views.values():
-			if is_instance_valid(v):
-				v.queue_redraw()
-		_update_value_label()
+	for e in grid.entries:
+		if e.get("inspecting", false):
+			_overlay.queue_redraw()
+			break
 	# 每秒刷一次 freshness 边框 + value label(背包格才动,仓库不变质所以也只是浪费一次绘制)
 	_fresh_redraw_accum += delta
 	if _fresh_redraw_accum >= 1.0:
@@ -175,7 +181,7 @@ func _add_item_view(entry: Dictionary) -> void:
 	view.mouse_entered.connect(_on_view_mouse_entered.bind(entry, view))
 	view.mouse_exited.connect(_on_view_mouse_exited.bind(entry))
 	_items_container.add_child(view)
-	item_views[entry] = view
+	item_views[_entry_uid(entry)] = view
 
 func _on_view_input(event: InputEvent, entry: Dictionary, _view: Control) -> void:
 	if event is InputEventMouseButton and event.pressed:
@@ -202,6 +208,8 @@ func _on_sort_pressed() -> void:
 	sort_requested.emit()
 
 func _update_value_label() -> void:
+	if grid == null or _value_label == null:
+		return
 	var sum: int = 0
 	for e in grid.entries:
 		if e.get("inspected", false) or e.get("examined", false):
@@ -224,14 +232,22 @@ func cell_at_local(local_pos: Vector2) -> Vector2i:
 func grid_origin_global() -> Vector2:
 	return _bg.global_position
 
+func get_view_for_entry(entry: Dictionary) -> Control:
+	# 外部访问入口:用 entry 的稳定 uid 查 view。不要直接读 item_views[entry] —— 那会
+	# 因为 Dictionary content-hash 陷阱在 entry mutate 后失效(见 _entry_uid 注释)。
+	if entry == null or not entry.has(_UID_KEY):
+		return null
+	return item_views.get(int(entry[_UID_KEY]), null)
+
 func add_entry_at(entry: Dictionary, x: int, y: int) -> bool:
 	if grid.place(entry, x, y):
 		# 防视觉孤儿:同 grid 内 place 时,旧 view 还在 _items_container,必须先 free
-		if item_views.has(entry):
-			var old: Control = item_views[entry]
+		var uid: int = _entry_uid(entry)
+		if item_views.has(uid):
+			var old: Control = item_views[uid]
 			if is_instance_valid(old):
 				old.queue_free()
-			item_views.erase(entry)
+			item_views.erase(uid)
 		_add_item_view(entry)
 		_update_value_label()
 		return true
@@ -239,11 +255,12 @@ func add_entry_at(entry: Dictionary, x: int, y: int) -> bool:
 
 func remove_entry(entry: Dictionary) -> void:
 	grid.remove_entry(entry)
-	if item_views.has(entry):
-		var v = item_views[entry]
+	var uid: int = _entry_uid(entry)
+	if item_views.has(uid):
+		var v = item_views[uid]
 		if is_instance_valid(v):
 			v.queue_free()
-		item_views.erase(entry)
+		item_views.erase(uid)
 	# 注意:这里**不能**清 _last_click_entry —— 否则破坏双击拾取
 	# (双击场景:click 1 触发 drag-out → remove_entry → 若清记录则 click 2 不识别)
 	_update_value_label()
