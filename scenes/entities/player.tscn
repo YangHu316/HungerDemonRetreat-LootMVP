@@ -1,7 +1,18 @@
-[gd_scene load_steps=54 format=3]
+[gd_scene load_steps=55 format=3]
 
 [ext_resource type="Script" path="res://scripts/entities/player.gd" id="1_player"]
 [ext_resource type="Shader" path="res://shaders/shadow_blob.gdshader" id="2_shader"]
+
+[sub_resource type="SceneReplicationConfig" id="sync_cfg"]
+properties/0/path = NodePath(".:global_position")
+properties/0/spawn = true
+properties/0/replication_mode = 2
+properties/1/path = NodePath("BodyRoot:rotation")
+properties/1/spawn = true
+properties/1/replication_mode = 2
+properties/2/path = NodePath(".:current_stance")
+properties/2/spawn = true
+properties/2/replication_mode = 1
 
 [sub_resource type="CapsuleShape3D" id="player_shape"]
 radius = 0.35
@@ -450,3 +461,6 @@ cast_shadow = 0
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, -0.23)
 mesh = SubResource("box_latch_mesh")
 material_override = SubResource("box_latch_mat")
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_config = SubResource("sync_cfg")

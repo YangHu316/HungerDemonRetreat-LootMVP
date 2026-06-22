@@ -8,7 +8,7 @@
 - **类型**: 3D 斜俯视 + 网格搜刮（"饿魔退散"MVP）
 - **autoload**: `EventBus` / `GameSession` / `PlayerInventory`(本地玩家代理) / `Stamina`(本地玩家代理) / `Logger` / `Stash` / `OrderPool` / `MultiplayerManager`(LAN host/client + 大厅)
 - **per-player 组件**: `InventoryComp` / `StaminaComp` 挂在 Player 节点下 — autoload 只是 forward 层
-- **联机进度(Phase 2A 完)**: ENet host/client + 大厅 + Player `_input/_physics_process` 加 `is_multiplayer_authority` 守卫;**Tier 3-5(动态 spawn + sync)等下一轮**(要改 main.tscn 删 hardcoded Player,需要用户关 Godot 编辑器)
+- **联机进度(Phase 2A 完)**: ENet host/client + 大厅 + Player 动态 spawn(MultiplayerSpawner-free,各 peer 本地按 mm.players 实例化) + MultiplayerSynchronizer 同步 global_position/BodyRoot:rotation/current_stance。**容器/背包/订单同步在 Phase 2B/C/D 跟进**。
 - **入口**: `res://scenes/menu.tscn` → home.tscn(单人) / 联机模式占位 → main.tscn(战局)
 - **不要手改的**: `project_state.md`(auto-gen)、`.godot/`(cache)
 
@@ -115,8 +115,9 @@ Logger.event("some_local_check", {"x": 42})
 | [test/unit/test_multiplayer_manager.gd](test/unit/test_multiplayer_manager.gd) | **Phase 2A 联机**:状态机(SINGLE/HOST/CLIENT) / MAX_PEERS=3 / _all_ready 逻辑 / get_local_peer_id 路径 / 必备 signal+method 清单 |
 | [test/unit/test_lobby_ui.gd](test/unit/test_lobby_ui.gd) | **Phase 2A 大厅**:lobby.gd 必须调 MM.host_room/join_room/leave_room/set_local_ready/start_game,有返回菜单接线 |
 | [test/unit/test_player_authority.gd](test/unit/test_player_authority.gd) | **Phase 2A Player 权限**:player.gd `_input` 和 `_physics_process` 必须以 `if not is_multiplayer_authority(): return` 开头(否则远端 peer 的 Player 也会响应本地输入,网络混乱) |
+| [test/unit/test_main_dynamic_spawn.gd](test/unit/test_main_dynamic_spawn.gd) | **Phase 2A Tier 3-5 架构**:main.tscn 不能有 hardcoded $Player(必须 PlayersRoot 容器+动态 spawn) / main.gd preload player.tscn + _spawn_players + 多人调 set_multiplayer_authority / player.tscn 必挂 MultiplayerSynchronizer 同步 global_position/BodyRoot:rotation/current_stance / player.gd._ready 不能自动 register PlayerInventory(多人会覆盖本地指针,改由 main.gd._bind_local 显式 register) |
 
-跑全量 = 142 测试 / 512 assert。
+跑全量 = 147 测试 / 530 assert。
 
 ## 已知小 bug(P2,先记录不修)
 

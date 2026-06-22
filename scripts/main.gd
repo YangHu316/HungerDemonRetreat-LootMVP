@@ -4,12 +4,17 @@ extends Node3D
 # v11 Main scene controller
 # - 保留 v10 全部玩法（窗户、墙体、容器、扩展逻辑）
 # - v11 §4-6：装饰布置完全程序化重建（卧室重摆 / 主厅治乱 / 生活细节）
+# - Phase 2A §联机:Player 改动态 spawn(MultiplayerManager.mode 决定)
 # ============================================================
 
-@onready var player: CharacterBody3D = $Player
+const PlayerScene := preload("res://scenes/entities/player.tscn")
+
 @onready var camera_rig: Node3D = $CameraRig
 @onready var search_ui: CanvasLayer = $SearchUI
 @onready var spawn_marker: Marker3D = $World/PlayerSpawn
+@onready var players_root: Node3D = $PlayersRoot
+
+var local_player: CharacterBody3D = null
 
 const WALL_HEIGHT: float = 3.0
 const WALL_THICKNESS: float = 0.3
@@ -31,11 +36,8 @@ func _ready() -> void:
 	_build_extra_decor()
 	_ensure_decor_collisions()
 
-	if spawn_marker != null:
-		player.global_position = spawn_marker.global_position
-	camera_rig.target_path = camera_rig.get_path_to(player)
-	camera_rig.target = player
-	search_ui.bind_player(player)
+	_spawn_players()
+
 	var gs = get_node("/root/GameSession")
 	if not gs.round_started.is_connected(_on_round_started):
 		gs.round_started.connect(_on_round_started)
@@ -43,11 +45,69 @@ func _ready() -> void:
 
 	call_deferred("_verify_reachability")
 
+func _spawn_players() -> void:
+	# Phase 2A:依 MultiplayerManager 状态决定 spawn 数量 + authority
+	#   SINGLE → 1 个 player,不设 authority(单机 multiplayer_peer == null)
+	#   HOST / CLIENT → 为 mm.players.keys() 每个 peer 各 spawn 一个
+	#     authority 设为 peer_id;只有 authority 节点跑 physics + 输入
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null or mm.is_single():
+		var p := _make_player(0, 0)
+		players_root.add_child(p)
+		_position_player(p, 0)
+		_bind_local(p)
+		return
+	# 多人:peer_ids 排序保证各 peer 顺序一致,position 偏移可复现
+	var peer_ids: Array = mm.players.keys()
+	peer_ids.sort()
+	var my_id: int = multiplayer.get_unique_id()
+	for i in range(peer_ids.size()):
+		var pid: int = int(peer_ids[i])
+		var p := _make_player(pid, i)
+		players_root.add_child(p)
+		# set_multiplayer_authority recursive=true(默认),propagate 到 MultiplayerSynchronizer
+		p.set_multiplayer_authority(pid)
+		_position_player(p, i)
+		if pid == my_id:
+			_bind_local(p)
+
+func _make_player(peer_id: int, _slot: int) -> CharacterBody3D:
+	var p: CharacterBody3D = PlayerScene.instantiate()
+	p.name = "Player_%d" % peer_id if peer_id > 0 else "Player"
+	return p
+
+func _position_player(p: CharacterBody3D, slot: int) -> void:
+	if spawn_marker == null:
+		return
+	# 多人时按 slot 偏移,避免重叠
+	var offset: Vector3 = Vector3((slot - 0.5) * 1.2, 0, 0) if slot > 0 or _is_multiplayer() else Vector3.ZERO
+	p.global_position = spawn_marker.global_position + offset
+
+func _bind_local(p: CharacterBody3D) -> void:
+	local_player = p
+	# §联机:本地 Player 注册到 autoload 代理(只有 local 该绑 HUD/SearchUI)
+	var pinv = get_node_or_null("/root/PlayerInventory")
+	if pinv != null:
+		pinv.register_local_player(p)
+	var stam = get_node_or_null("/root/Stamina")
+	if stam != null:
+		stam.register_local_player(p)
+	if camera_rig != null:
+		camera_rig.target_path = camera_rig.get_path_to(p)
+		camera_rig.target = p
+	if search_ui != null and search_ui.has_method("bind_player"):
+		search_ui.bind_player(p)
+
+func _is_multiplayer() -> bool:
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	return mm != null and not mm.is_single()
+
 func _on_round_started() -> void:
-	if player != null and spawn_marker != null:
-		player.global_position = spawn_marker.global_position
-		if player.has_method("reset_motion"):
-			player.reset_motion()
+	# 本地玩家位置 reset(Phase 2A 简化:每个 peer 本地 reset,不走 RPC)
+	if local_player != null and spawn_marker != null:
+		local_player.global_position = spawn_marker.global_position
+		if local_player.has_method("reset_motion"):
+			local_player.reset_motion()
 	for c in get_tree().get_nodes_in_group("containers"):
 		if c.has_method("reset_and_regenerate"):
 			c.reset_and_regenerate()
@@ -68,7 +128,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("interact"):
 		if gs.state == "PLAYING":
-			var c = player.nearby_container
+			if local_player == null:
+				return
+			var c = local_player.nearby_container
 			if c != null and is_instance_valid(c):
 				search_ui.open_for(c)
 				get_viewport().set_input_as_handled()

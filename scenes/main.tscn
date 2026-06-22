@@ -200,8 +200,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, -1)
 [node name="PlayerSpawn" type="Marker3D" parent="World" unique_id=1973754304]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 1, 7.8)
 
-[node name="Player" parent="." unique_id=2072965128 instance=ExtResource("12_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 1, 7.8)
+[node name="PlayersRoot" type="Node3D" parent="."]
 
 [node name="CameraRig" type="Node3D" parent="." unique_id=1816152543]
 script = ExtResource("3")

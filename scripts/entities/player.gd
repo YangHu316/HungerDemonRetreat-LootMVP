@@ -88,13 +88,10 @@ func _ready() -> void:
 		stamina_comp = StaminaComp.new()
 		stamina_comp.name = "StaminaComp"
 		add_child(stamina_comp)
-	# 注册本地玩家 → autoload 代理 forward 到这两个 comp
-	var pinv = get_node_or_null("/root/PlayerInventory")
-	if pinv != null:
-		pinv.register_local_player(self)
+	# §联机:Player._ready 不再自动 register 到 PlayerInventory/Stamina autoload
+	# 因为多人模式下每个 peer 本地 spawn 多个 Player(本地 + 远端 peer 的代理),
+	# 只有本地 peer 的 Player 才该绑 autoload。改由 main.gd._bind_local 显式调用。
 	_stamina = get_node_or_null("/root/Stamina")
-	if _stamina != null:
-		_stamina.register_local_player(self)
 	_bus = get_node_or_null("/root/EventBus")
 
 	# v9 §4.B 防御：确保 player 碰撞层正确
@@ -127,8 +124,9 @@ func _exit_tree() -> void:
 	var pinv = get_node_or_null("/root/PlayerInventory")
 	if pinv != null:
 		pinv.unregister_local_player(self)
-	if _stamina != null:
-		_stamina.unregister_local_player(self)
+	var stam = get_node_or_null("/root/Stamina")
+	if stam != null:
+		stam.unregister_local_player(self)
 
 # v8 §4.3 interactables 注册
 func register_interactable(obj: Node) -> void:
@@ -177,8 +175,9 @@ func _update_nearest_interactable() -> void:
 
 func _input(event: InputEvent) -> void:
 	# §联机:只有本地 peer 的 Player 才响应输入
-	# 单人模式 multiplayer.has_multiplayer_peer()==false → is_multiplayer_authority() 默认 true,零回归
-	if not is_multiplayer_authority():
+	# 单人模式(没设 multiplayer peer)直接跑;避免 is_multiplayer_authority 内部
+	# 调 get_unique_id 在无 peer 时 push error 刷屏。
+	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
 		return
 	if movement_locked:
 		return
@@ -191,8 +190,8 @@ func _input(event: InputEvent) -> void:
 
 func _physics_process(delta: float) -> void:
 	# §联机:只有本地 peer 的 Player 跑物理 + 读输入
-	# 远端 peer 的 Player 由 MultiplayerSynchronizer 收快照(位置/朝向),不需要本地物理
-	if not is_multiplayer_authority():
+	# 单人模式(没设 peer)直接跑;远端 peer 的 Player 由 MultiplayerSynchronizer 收快照
+	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
 		return
 	if global_position.y < FALL_THRESHOLD:
 		global_position = RESPAWN_POS
