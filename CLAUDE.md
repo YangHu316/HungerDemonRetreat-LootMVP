@@ -6,7 +6,8 @@
 
 - **引擎**: Godot 4.6(本地用 4.6.2/4.6.3,CI 锁 4.6.2)
 - **类型**: 3D 斜俯视 + 网格搜刮（"饿魔退散"MVP）
-- **autoload**: `EventBus` / `GameSession` / `PlayerInventory` / `Stamina` / `Logger`
+- **autoload**: `EventBus` / `GameSession` / `PlayerInventory`(本地玩家代理) / `Stamina`(本地玩家代理) / `Logger` / `Stash` / `OrderPool`
+- **per-player 组件**: `InventoryComp` / `StaminaComp` 挂在 Player 节点下 — autoload 只是 forward 层。**为联机做准备**:host 和 client 各自的 Player 持有自己的 comp,autoload 永远指向"本地玩家"
 - **入口**: `res://scenes/main.tscn`(由 `project.godot run/main_scene` 决定)
 - **不要手改的**: `project_state.md`(auto-gen)、`.godot/`(cache)
 
@@ -106,8 +107,11 @@ Logger.event("some_local_check", {"x": 42})
 | [test/unit/test_freshness.gd](test/unit/test_freshness.gd) | §三 后半 + §十三 食物变质 4 档:tier_for 数学/clamp / multiplier [1.0,0.6,0.3,0.0] / entry_value 非食物原价+食物打折 / GameSession.tick 只推进食物不推非食物 / Stash 不变质(GameSession 不迭代 stash) / get_total_value 自然带打折 / transfer_to/from_stash 保留 freshness_elapsed |
 | [test/unit/test_double_click_safety.gd](test/unit/test_double_click_safety.gd) | 双击防误触:_try_drop 检测"源 panel 同 cell 同 rot" → cancel_drag 不 emit item_moved(2026-06-22 用户双击食物报"复制":双击 click 1 release 落同位置产生噪音 item_moved,与 click 2 双击转移叠加视觉抖动) |
 | [test/unit/test_dict_as_key.gd](test/unit/test_dict_as_key.gd) | **Godot 4 Dictionary 陷阱**:mutable Dictionary 作 dict key,key 内容变化后 has/erase 失效。grid_panel.item_views 改用 entry 稳定 int uid 作 key,绝不能回退用 entry Dictionary(2026-06-22 用户反复 inv↔container 拖食物,看到 1 个面包变 4 个;根因是旧 view 不被 free 累积,数据层正常) |
+| [test/unit/test_inventory_comp.gd](test/unit/test_inventory_comp.gd) | **§联机准备**:InventoryComp 独立组件 — 两个实例数据完全隔离 / changed signal per-instance(per-player 背包基础) |
+| [test/unit/test_stamina_comp.gd](test/unit/test_stamina_comp.gd) | **§联机准备**:StaminaComp 独立组件 — 两个实例状态完全隔离(per-player 体力基础) |
+| [test/unit/test_autoload_proxy.gd](test/unit/test_autoload_proxy.gd) | **§联机准备**:autoload `PlayerInventory`/`Stamina` 是 forward 代理 — 无 local_player 时 _fallback_comp 兜底,register 后 forward 到 player.inventory_comp,切换 local_player 时透明换源 |
 
-跑全量 = 106 测试 / 425+ assert。
+跑全量 = 115 测试 / 458 assert。
 
 ## 已知小 bug(P2,先记录不修)
 

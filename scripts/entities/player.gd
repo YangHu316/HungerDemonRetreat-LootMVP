@@ -72,9 +72,29 @@ var _current_head_yaw: float = 0.0
 var _stamina: Node = null
 var _bus: Node = null
 
+# §联机准备:per-player Inventory/Stamina 组件(挂在 Player 节点下)
+# autoload PlayerInventory / Stamina 只是代理,数据全在这里
+@onready var inventory_comp: InventoryComp = $InventoryComp if has_node("InventoryComp") else null
+@onready var stamina_comp: StaminaComp = $StaminaComp if has_node("StaminaComp") else null
+
 func _ready() -> void:
 	add_to_group("player")
+	# 兜底:scene 里没挂 comp 子节点时,代码侧补建(老 main.tscn 兼容)
+	if inventory_comp == null:
+		inventory_comp = InventoryComp.new()
+		inventory_comp.name = "InventoryComp"
+		add_child(inventory_comp)
+	if stamina_comp == null:
+		stamina_comp = StaminaComp.new()
+		stamina_comp.name = "StaminaComp"
+		add_child(stamina_comp)
+	# 注册本地玩家 → autoload 代理 forward 到这两个 comp
+	var pinv = get_node_or_null("/root/PlayerInventory")
+	if pinv != null:
+		pinv.register_local_player(self)
 	_stamina = get_node_or_null("/root/Stamina")
+	if _stamina != null:
+		_stamina.register_local_player(self)
 	_bus = get_node_or_null("/root/EventBus")
 
 	# v9 §4.B 防御：确保 player 碰撞层正确
@@ -101,6 +121,14 @@ func _ready() -> void:
 	# arm_l/leg_l 设到测试姿势，并把 transform 比对结果存到 test_* 字段供 assert 读
 	if anim_test_mode:
 		_run_anim_test_sync()
+
+func _exit_tree() -> void:
+	# §联机准备:Player 离场时把 autoload 的 local_player 指针清掉
+	var pinv = get_node_or_null("/root/PlayerInventory")
+	if pinv != null:
+		pinv.unregister_local_player(self)
+	if _stamina != null:
+		_stamina.unregister_local_player(self)
 
 # v8 §4.3 interactables 注册
 func register_interactable(obj: Node) -> void:
