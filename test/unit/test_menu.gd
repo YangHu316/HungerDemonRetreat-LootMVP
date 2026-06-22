@@ -24,12 +24,15 @@ func test_menu_single_button_goes_to_home() -> void:
 	assert_true(src.contains("change_scene_to_file") and src.contains("res://scenes/home.tscn"),
 		"menu.gd 单人按钮必须切到 home.tscn")
 
-func test_menu_multi_button_is_disabled() -> void:
-	# 联机按钮必须 disabled(Phase 2 才接入)
+func test_menu_multi_button_is_enabled() -> void:
+	# Phase 2A 已解锁联机按钮(disabled = false)
 	var src: String = load("res://scripts/menu.gd").source_code
-	# 简单匹配:_multi_btn.disabled = true
-	assert_true(src.contains("_multi_btn.disabled = true") or src.contains("multi_btn.disabled = true"),
-		"联机按钮必须 disabled,Phase 2 真联机才解锁")
+	# 必须没有 _multi_btn.disabled = true(整型设置)
+	assert_false(src.contains("_multi_btn.disabled = true"),
+		"Phase 2A 联机按钮必须解锁(不能是 disabled=true)")
+	# 必须有 _on_multi 跳到 lobby
+	assert_true(src.contains("res://scenes/lobby.tscn"),
+		"联机按钮必须切到 lobby.tscn")
 
 func test_home_has_back_to_menu_button() -> void:
 	var src: String = load("res://scripts/home.gd").source_code

@@ -4,6 +4,7 @@ extends Control
 # 联机模式 → 占位(disabled,等 Phase 2 上 MultiplayerAPI + ENet)
 
 const HOME_SCENE := "res://scenes/home.tscn"
+const LOBBY_SCENE := "res://scenes/lobby.tscn"
 
 var _single_btn: Button
 var _multi_btn: Button
@@ -61,13 +62,13 @@ func _build_ui() -> void:
 	_single_btn.pressed.connect(_on_single)
 	vbox.add_child(_single_btn)
 
-	# 联机模式按钮(disabled,等 Phase 2)
+	# 联机模式按钮(LAN 主机权威,Phase 2A 已通,容器/背包同步留 Phase 2B/2C)
 	_multi_btn = Button.new()
-	_multi_btn.text = "联机模式 (开发中)"
+	_multi_btn.text = "联机模式(LAN)"
 	_multi_btn.custom_minimum_size = Vector2(0, 60)
 	_multi_btn.add_theme_font_size_override("font_size", 24)
-	_multi_btn.disabled = true
-	_multi_btn.tooltip_text = "2-3 人主机权威联机,Phase 2 开发中。Player 组件化地基已就绪。"
+	_multi_btn.tooltip_text = "LAN 主机权威联机。Phase 2A:位置同步可玩;容器/背包/订单各人独立(Phase 2B/2C 跟进)"
+	_multi_btn.pressed.connect(_on_multi)
 	vbox.add_child(_multi_btn)
 
 	# 版本号 / 状态
@@ -80,3 +81,6 @@ func _build_ui() -> void:
 
 func _on_single() -> void:
 	get_tree().change_scene_to_file(HOME_SCENE)
+
+func _on_multi() -> void:
+	get_tree().change_scene_to_file(LOBBY_SCENE)

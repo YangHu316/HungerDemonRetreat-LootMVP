@@ -6,8 +6,9 @@
 
 - **引擎**: Godot 4.6(本地用 4.6.2/4.6.3,CI 锁 4.6.2)
 - **类型**: 3D 斜俯视 + 网格搜刮（"饿魔退散"MVP）
-- **autoload**: `EventBus` / `GameSession` / `PlayerInventory`(本地玩家代理) / `Stamina`(本地玩家代理) / `Logger` / `Stash` / `OrderPool`
-- **per-player 组件**: `InventoryComp` / `StaminaComp` 挂在 Player 节点下 — autoload 只是 forward 层。**为联机做准备**:host 和 client 各自的 Player 持有自己的 comp,autoload 永远指向"本地玩家"
+- **autoload**: `EventBus` / `GameSession` / `PlayerInventory`(本地玩家代理) / `Stamina`(本地玩家代理) / `Logger` / `Stash` / `OrderPool` / `MultiplayerManager`(LAN host/client + 大厅)
+- **per-player 组件**: `InventoryComp` / `StaminaComp` 挂在 Player 节点下 — autoload 只是 forward 层
+- **联机进度(Phase 2A 完)**: ENet host/client + 大厅 + Player `_input/_physics_process` 加 `is_multiplayer_authority` 守卫;**Tier 3-5(动态 spawn + sync)等下一轮**(要改 main.tscn 删 hardcoded Player,需要用户关 Godot 编辑器)
 - **入口**: `res://scenes/menu.tscn` → home.tscn(单人) / 联机模式占位 → main.tscn(战局)
 - **不要手改的**: `project_state.md`(auto-gen)、`.godot/`(cache)
 
@@ -110,9 +111,12 @@ Logger.event("some_local_check", {"x": 42})
 | [test/unit/test_inventory_comp.gd](test/unit/test_inventory_comp.gd) | **§联机准备**:InventoryComp 独立组件 — 两个实例数据完全隔离 / changed signal per-instance(per-player 背包基础) |
 | [test/unit/test_stamina_comp.gd](test/unit/test_stamina_comp.gd) | **§联机准备**:StaminaComp 独立组件 — 两个实例状态完全隔离(per-player 体力基础) |
 | [test/unit/test_autoload_proxy.gd](test/unit/test_autoload_proxy.gd) | **§联机准备**:autoload `PlayerInventory`/`Stamina` 是 forward 代理 — 无 local_player 时 _fallback_comp 兜底,register 后 forward 到 player.inventory_comp,切换 local_player 时透明换源 |
-| [test/unit/test_menu.gd](test/unit/test_menu.gd) | **主菜单入口**:menu.tscn 存在 / project.godot main_scene 指向 menu / 单人按钮切 home.tscn / 联机按钮 disabled / home 有"返回主菜单"按钮 |
+| [test/unit/test_menu.gd](test/unit/test_menu.gd) | **主菜单入口**:menu.tscn 存在 / project.godot main_scene 指向 menu / 单人按钮切 home / **联机按钮已解锁(Phase 2A)** / home 有"返回主菜单"按钮 |
+| [test/unit/test_multiplayer_manager.gd](test/unit/test_multiplayer_manager.gd) | **Phase 2A 联机**:状态机(SINGLE/HOST/CLIENT) / MAX_PEERS=3 / _all_ready 逻辑 / get_local_peer_id 路径 / 必备 signal+method 清单 |
+| [test/unit/test_lobby_ui.gd](test/unit/test_lobby_ui.gd) | **Phase 2A 大厅**:lobby.gd 必须调 MM.host_room/join_room/leave_room/set_local_ready/start_game,有返回菜单接线 |
+| [test/unit/test_player_authority.gd](test/unit/test_player_authority.gd) | **Phase 2A Player 权限**:player.gd `_input` 和 `_physics_process` 必须以 `if not is_multiplayer_authority(): return` 开头(否则远端 peer 的 Player 也会响应本地输入,网络混乱) |
 
-跑全量 = 120 测试 / 466 assert。
+跑全量 = 142 测试 / 512 assert。
 
 ## 已知小 bug(P2,先记录不修)
 

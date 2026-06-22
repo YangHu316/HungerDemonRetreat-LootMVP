@@ -176,6 +176,10 @@ func _update_nearest_interactable() -> void:
 		_bus.interact_prompt.emit(txt)
 
 func _input(event: InputEvent) -> void:
+	# §联机:只有本地 peer 的 Player 才响应输入
+	# 单人模式 multiplayer.has_multiplayer_peer()==false → is_multiplayer_authority() 默认 true,零回归
+	if not is_multiplayer_authority():
+		return
 	if movement_locked:
 		return
 	if event.is_action_pressed("interact"):
@@ -186,6 +190,10 @@ func _input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 
 func _physics_process(delta: float) -> void:
+	# §联机:只有本地 peer 的 Player 跑物理 + 读输入
+	# 远端 peer 的 Player 由 MultiplayerSynchronizer 收快照(位置/朝向),不需要本地物理
+	if not is_multiplayer_authority():
+		return
 	if global_position.y < FALL_THRESHOLD:
 		global_position = RESPAWN_POS
 		velocity = Vector3.ZERO
