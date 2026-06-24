@@ -85,6 +85,18 @@ func interact(_player: Node) -> void:
 	toggle()
 
 func toggle() -> void:
+	# Phase 2B fix bug 6:门状态多人同步
+	# 单人:本地直接 _apply_toggle_local
+	# 多人:走 mm.notify_door_toggle → host 校验 + 广播 → 各 peer _apply_toggle_local
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null or (mm.has_method("is_single") and mm.is_single()):
+		_apply_toggle_local()
+	else:
+		if mm.has_method("notify_door_toggle"):
+			mm.notify_door_toggle(String(self.get_path()))
+
+# 真正执行开/关门的本地逻辑(给 RPC 和单人共用,幂等于 is_open 状态切换)
+func _apply_toggle_local() -> void:
 	if _pivot == null:
 		_pivot = get_node_or_null("DoorPivot") as Node3D
 	if _pivot == null:

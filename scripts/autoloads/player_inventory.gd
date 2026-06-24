@@ -35,8 +35,16 @@ func register_local_player(p: Node) -> void:
 			old_comp.changed.disconnect(_on_comp_changed)
 	local_player = p
 	var new_comp = p.get("inventory_comp")
-	if new_comp != null and not new_comp.changed.is_connected(_on_comp_changed):
-		new_comp.changed.connect(_on_comp_changed)
+	if new_comp != null:
+		# Phase 2B fix bug 3v2:跨场景持久化 — 上一局的物品在 _fallback_comp 中保存
+		# 进新场景,新 Player 的 inventory_comp 是空的 → 从 fallback 迁移过来
+		# (home → main 重开战局:把上局撤回的物品恢复到新 Player 背包)
+		if new_comp.grid != null and new_comp.grid.entries.is_empty() \
+				and _fallback_comp != null and _fallback_comp.grid != null \
+				and not _fallback_comp.grid.entries.is_empty():
+			_migrate_grid(_fallback_comp.grid, new_comp.grid)
+		if not new_comp.changed.is_connected(_on_comp_changed):
+			new_comp.changed.connect(_on_comp_changed)
 	changed.emit()  # 切换玩家 = 数据变化
 
 func unregister_local_player(p: Node) -> void:
@@ -44,10 +52,26 @@ func unregister_local_player(p: Node) -> void:
 		return
 	if local_player != null and is_instance_valid(local_player):
 		var old_comp = local_player.get("inventory_comp")
-		if old_comp != null and old_comp.changed.is_connected(_on_comp_changed):
-			old_comp.changed.disconnect(_on_comp_changed)
+		if old_comp != null:
+			# Phase 2B fix bug 3v2:Player 即将被 free(scene change),先把数据搬到
+			# _fallback_comp 持久化。否则 home.tscn 看到 fallback 是空的(物品丢失)
+			if old_comp.grid != null and _fallback_comp != null and _fallback_comp.grid != null:
+				_migrate_grid(old_comp.grid, _fallback_comp.grid)
+			if old_comp.changed.is_connected(_on_comp_changed):
+				old_comp.changed.disconnect(_on_comp_changed)
 	local_player = null
 	changed.emit()
+
+# 把 src grid 内容深拷贝到 dst grid(持久化用)
+func _migrate_grid(src: GridInventory, dst: GridInventory) -> void:
+	if src == null or dst == null:
+		return
+	dst.cells.clear()
+	dst.entries.clear()
+	dst.setup(src.cols, src.rows)
+	for e in src.entries:
+		var ne: Dictionary = e.duplicate(true)
+		dst.place(ne, int(ne.get("x", 0)), int(ne.get("y", 0)))
 
 # 内部分派:有 local_player 用它的 comp,否则用 _fallback_comp
 func _get_comp() -> InventoryComp:

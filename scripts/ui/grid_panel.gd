@@ -186,16 +186,9 @@ func _add_item_view(entry: Dictionary) -> void:
 func _on_view_input(event: InputEvent, entry: Dictionary, _view: Control) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		var btn: int = (event as InputEventMouseButton).button_index
-		# 双击检测（仅左键）
-		if btn == MOUSE_BUTTON_LEFT and entry.get("inspected", false):
-			var now_ms: int = Time.get_ticks_msec()
-			if _last_click_entry == entry and (now_ms - _last_click_ms) <= DOUBLE_CLICK_MS:
-				item_double_clicked.emit(entry, self)
-				_last_click_entry = {}
-				_last_click_ms = 0
-				return
-			_last_click_entry = entry
-			_last_click_ms = now_ms
+		# Phase 2B fix bug 1v3:左键双击拾取删除(用户报多人下双击 race condition 导致 ghost 残留)
+		# 改成纯单击拖拽 + 右键快速转。双击不再 emit signal。
+		# (home.gd / search_ui.gd 仍可订阅 item_double_clicked,但不会再触发)
 		item_pressed.emit(entry, self, btn)
 
 func _on_view_mouse_entered(entry: Dictionary, view: Control) -> void:

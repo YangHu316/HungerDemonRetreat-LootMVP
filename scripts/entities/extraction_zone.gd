@@ -25,8 +25,18 @@ func _ready() -> void:
 	if gs != null and not gs.round_started.is_connected(_on_round_started):
 		gs.round_started.connect(_on_round_started)
 
-func _on_body_entered(body: Node) -> void:
+func _is_local_player(body: Node) -> bool:
+	# Phase 2B fix bug 3:多人下,host 的 extraction_zone 也会检测到 peer 2 同步过来的 Player_2,
+	# 导致一个人进撤离区,另一个人也跟着撤离。只反应 local-authority 的玩家。
 	if not body.is_in_group("player"):
+		return false
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null or (mm.has_method("is_single") and mm.is_single()):
+		return true  # 单人:任何 player 节点都算
+	return body.is_multiplayer_authority()
+
+func _on_body_entered(body: Node) -> void:
+	if not _is_local_player(body):
 		return
 	if not _hovering_players.has(body):
 		_hovering_players.append(body)
@@ -34,7 +44,7 @@ func _on_body_entered(body: Node) -> void:
 		_begin_countdown()
 
 func _on_body_exited(body: Node) -> void:
-	if not body.is_in_group("player"):
+	if not _is_local_player(body):
 		return
 	_hovering_players.erase(body)
 	if _hovering_players.is_empty() and _counting_down:
@@ -107,5 +117,5 @@ func _on_round_started() -> void:
 	await get_tree().physics_frame
 	# 主动遍历当前重叠的 body 触发 enter
 	for body in get_overlapping_bodies():
-		if body != null and body.is_in_group("player"):
+		if _is_local_player(body):
 			_on_body_entered(body)

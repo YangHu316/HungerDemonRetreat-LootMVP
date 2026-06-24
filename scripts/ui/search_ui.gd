@@ -183,6 +183,22 @@ func _on_container_entries_synced() -> void:
 			_inspect_timer = 0.0
 			_current_inspect_entry = {}
 			_advance_to_next_inspect()
+			return  # 已 advance,不再继续 IDLE 检测
+	# Phase 2B fix bug 2:_state IDLE(已搜完旧 entries)但 entries_synced 后有新 uninspected entry
+	# (其他 peer 放回物品 → 新 uid 不在本地 log → hydrate 后 inspected=false)
+	# → 需要重启 inspect 循环,否则 B 端永远看不到放回物品的搜刮动画
+	if _state == UIState.IDLE:
+		var has_uninspected: bool = false
+		for e in _container.contents.entries:
+			if not e.get("inspected", false):
+				has_uninspected = true
+				break
+		if has_uninspected:
+			_state = UIState.OPENING
+			_inspect_timer = 0.0
+			_current_inspect_entry = {}
+			_advance_to_next_inspect()
+			return
 	# 取消 pending take 视觉(如果当前 entries 已无该 uid)
 	if not _pending_take.is_empty():
 		var p_uid: int = int(_pending_take.get("uid", -1))
@@ -241,6 +257,10 @@ func _on_item_pressed(entry: Dictionary, panel: GridPanel, button: int) -> void:
 		return
 	# 已在拖拽中：忽略新按下
 	if _drag != null:
+		return
+	# Phase 2B fix bug 1v3:等 host RPC 回复时(_pending_take 非空),禁止新拖拽 / 快速转
+	# 否则前次 pending 的 ghost / source 引用被新动作覆盖,残留 view + 旧 take_granted ignored
+	if not _pending_take.is_empty():
 		return
 	if button == MOUSE_BUTTON_LEFT:
 		_begin_drag(entry, panel)
@@ -552,33 +572,37 @@ func _initiate_multi_put(dest_panel: GridPanel, cx: int, cy: int, rot: bool) -> 
 		_cancel_drag()
 		return
 	var c_path: String = String(_container.get_path())
+	var src_x: int = _drag.original_x
+	var src_y: int = _drag.original_y
+	var freshness: float = float(entry.get("freshness_elapsed", 0.0))
+	var item_path: String = item.resource_path
 	# 锁 ghost 显示"等待中"
-	_pending_take = {
-		"is_put": true,
-		"uid": -1,  # put 不需要 uid(host 会分配新的)
-		"item_path": item.resource_path,
-		"container_path": c_path,
-		"source_entry": entry,
-		"source_panel": _drag.from_panel,
-		"source_inv_x": _drag.original_x,
-		"source_inv_y": _drag.original_y,
-		"dest_x": cx,
-		"dest_y": cy,
-		"rotated": rot,
-	}
 	if _drag.ghost != null and is_instance_valid(_drag.ghost):
 		_drag.ghost.modulate = Color(1, 1, 1, 0.35)
 	if _drag.highlight != null and is_instance_valid(_drag.highlight):
 		_drag.highlight.color = Color(0.85, 0.6, 0.6, 0.35)
-	_pending_take["ghost"] = _drag.ghost
-	_pending_take["highlight"] = _drag.highlight
+	# Phase 2B fix bug 5:**必须 BEFORE mm.request_put** 完整设置 _pending_take(同 _initiate_multi_take)
+	_pending_take = {
+		"is_put": true,
+		"uid": -1,  # put 不需要 uid(host 会分配新的)
+		"item_path": item_path,
+		"container_path": c_path,
+		"source_entry": entry,
+		"source_panel": _drag.from_panel,
+		"source_inv_x": src_x,
+		"source_inv_y": src_y,
+		"dest_x": cx,
+		"dest_y": cy,
+		"rotated": rot,
+		"ghost": _drag.ghost,
+		"highlight": _drag.highlight,
+	}
 	_drag.ghost = null
 	_drag.highlight = null
 	_drag = null
-	# 发 put RPC
+	# 发 put RPC(host 自己同步触发 put_granted,_pending_take 已就绪可被清掉)
 	if mm.has_method("request_put"):
-		mm.request_put(c_path, item.resource_path, float(entry.get("freshness_elapsed", 0.0)),
-			cx, cy, rot, _pending_take["source_inv_x"], _pending_take["source_inv_y"])
+		mm.request_put(c_path, item_path, freshness, cx, cy, rot, src_x, src_y)
 
 # Phase 2B Tier B5:多人 take 入口
 # _drag 是 no_remove DragState;ghost 已显示,这里发 RPC 给 host
@@ -594,6 +618,14 @@ func _initiate_multi_take(dest_panel: GridPanel, cx: int, cy: int, rot: bool) ->
 		return
 	var c_path: String = String(_container.get_path())
 	# 锁 ghost 显示"等待中"
+	if _drag.ghost != null and is_instance_valid(_drag.ghost):
+		_drag.ghost.modulate = Color(1, 1, 1, 0.35)
+	if _drag.highlight != null and is_instance_valid(_drag.highlight):
+		_drag.highlight.color = Color(0.6, 0.6, 0.85, 0.35)
+	# Phase 2B fix bug 5:**必须 BEFORE mm.request_take** 完整设置 _pending_take(含 ghost/highlight)
+	# 因为 host 自取时 request_take 同步触发 take_granted → _on_take_granted → _clear_pending_take_visuals
+	# 把 _pending_take 重置为新空 dict {}。之后再写 ghost/highlight 就是写到新 dict → 永远清不掉
+	# (导致 ghost 卡左上角 + _pending_take 永远非空 → _on_item_pressed 守卫挡住所有新拾取)
 	_pending_take = {
 		"uid": uid,
 		"container_path": c_path,
@@ -603,23 +635,16 @@ func _initiate_multi_take(dest_panel: GridPanel, cx: int, cy: int, rot: bool) ->
 		"rotated": rot,
 		"source_entry": entry,
 		"source_panel": _drag.from_panel,
+		"ghost": _drag.ghost,
+		"highlight": _drag.highlight,
 	}
-	if _drag.ghost != null and is_instance_valid(_drag.ghost):
-		_drag.ghost.modulate = Color(1, 1, 1, 0.35)
-	# 锁 highlight 颜色
-	if _drag.highlight != null and is_instance_valid(_drag.highlight):
-		_drag.highlight.color = Color(0.6, 0.6, 0.85, 0.35)
-	# Drag refers freed externally now;keep visuals
-	# 发 RPC(client → host;host 自己直接调,避免 rpc_id(1) self-fail)
+	# 释放 _drag 视觉引用(防 _finish_drag 双 free)
+	_drag.ghost = null
+	_drag.highlight = null
+	_drag = null
+	# 现在才发 RPC — _pending_take 已就绪,host 自取的同步 take_granted 能正确清理
 	if mm.has_method("request_take"):
 		mm.request_take(c_path, uid, dest_panel.grid_id, cx, cy, rot)
-	# 注意:_drag 视觉资源由 _on_take_granted/denied 清理。
-	# 把 _drag 引用搁到 _pending_take 里。
-	_pending_take["ghost"] = _drag.ghost
-	_pending_take["highlight"] = _drag.highlight
-	_drag.ghost = null  # 阻止 _finish_drag 清掉
-	_drag.highlight = null
-	_drag = null  # 释放 _drag(防止继续拖拽)
 
 func _on_take_granted(entry_wire: Dictionary, dest_grid_id: String, dest_x: int, dest_y: int, rotated: bool) -> void:
 	# host 同意 take:request 方收到,把 entry 加进自己背包(容器 entries 由 host broadcast 已同步更新)
@@ -678,7 +703,10 @@ func _on_take_denied(container_path: String, entry_uid: int, reason: String) -> 
 	_show_toast("拿取失败:%s" % reason)
 
 # Phase 2B Q2:put granted — host 已把物品加进容器,客户端从背包移除
-func _on_put_granted(item_path: String, source_inv_x: int, source_inv_y: int) -> void:
+# Phase 2B fix bug 2v2:host 在 reply 时附带 container_path + new_entry_uid,
+# putter 立即 mark_inspected(避免自己重新搜刮自己刚放进去的物品)
+func _on_put_granted(item_path: String, source_inv_x: int, source_inv_y: int,
+		container_path: String, new_entry_uid: int) -> void:
 	if _pending_take.is_empty():
 		return
 	if not _pending_take.get("is_put", false):
@@ -694,6 +722,12 @@ func _on_put_granted(item_path: String, source_inv_x: int, source_inv_y: int) ->
 	if not src_entry.is_empty():
 		inventory_panel.remove_entry(src_entry)
 	_inv.changed.emit()
+	# Phase 2B fix bug 2v2:把放回的新 uid 标 inspected(我已经认识这个物品了,不用再 inspect)
+	# 顺序:_send_put_granted 先发,broadcast_container_entries 后发 — 此 mark 早于 hydrate
+	if new_entry_uid >= 0 and container_path != "":
+		var lil = get_node_or_null("/root/LocalInspectLog")
+		if lil != null and lil.has_method("mark_inspected"):
+			lil.mark_inspected(container_path, new_entry_uid)
 	_clear_pending_take_visuals()
 
 func _on_put_denied(item_path: String, reason: String) -> void:
@@ -741,6 +775,10 @@ func _show_toast(msg: String) -> void:
 
 func _cancel_drag() -> void:
 	if _drag != null:
+		# Phase 2B fix bug 1v3:多人 no_remove 模式下,_begin_drag 调了 _dim_source_view
+		# (modulate 0.5),取消时必须 _restore_source_view 还原,否则源 view 灰底残留
+		if _drag.is_no_remove and _drag.from_panel != null and is_instance_valid(_drag.from_panel):
+			_restore_source_view(_drag.entry, _drag.from_panel)
 		_drag.cancel_drag()
 	_finish_drag()
 

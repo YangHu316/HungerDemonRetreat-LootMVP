@@ -8,7 +8,7 @@
 - **类型**: 3D 斜俯视 + 网格搜刮（"饿魔退散"MVP）
 - **autoload**: `EventBus` / `GameSession` / `PlayerInventory`(本地玩家代理) / `Stamina`(本地玩家代理) / `Logger` / `Stash` / `OrderPool` / `MultiplayerManager`(LAN host/client + 大厅) / `LocalInspectLog`(per-peer inspect 状态)
 - **per-player 组件**: `InventoryComp` / `StaminaComp` 挂在 Player 节点下 — autoload 只是 forward 层
-- **联机进度(Phase 2B 完)**: ENet host/client + 大厅 + Player 动态 spawn + 同步(global_position/BodyRoot:rotation/current_stance) + **容器 host 权威 entries 同步(uid 跨 peer)** + **per-peer inspect log**(每人独立放大镜动画)+ **已搜 badge 全局共享**(任一 peer 开过 → 所有 peer 看到)+ **取物保守 RPC**(client 发请求 → host 验证 + 广播 + reply granted/denied)+ **Round end host 权威**(任一 peer 撤离 → 全员回 home,本人保留 inv,他人迷失)+ **Home 多人 ready 流**(全员 ready → host 开下一局)。**背包/Stash 各人独立**(per-machine,无需同步)。**订单合计留 Phase 2C**。
+- **联机进度(Phase 2B v2 完)**: ENet host/client + 大厅 + Player 动态 spawn + 同步(global_position/BodyRoot:rotation/current_stance) + **容器 host 权威 entries 同步(uid 跨 peer)+ 实时 entries_synced** + **per-peer inspect log**(每人独立放大镜动画)+ **已搜 badge 全局共享**(任一 peer 开过 → 所有 peer 看到)+ **取物/放回对称 RPC**(client 发请求 → host 验证 + 广播 + reply granted/denied)+ **Per-peer 独立 done + 团队订单结算**(每人各自撤离/迷失,全员 done 后 host 计算订单合计 + reward_per_peer)+ **Home 多人 ready 流 + waiting state**(其他 peer 还在打时,本机 home 显示等待)。host 全局 timer(mm._process)即使本人撤了仍 tick → 到 0 全员 timeout。**背包/Stash 各人独立**(per-machine,无需同步)。
 - **入口**: `res://scenes/menu.tscn` → home.tscn(单人) / 联机模式占位 → main.tscn(战局)
 - **不要手改的**: `project_state.md`(auto-gen)、`.godot/`(cache)
 
@@ -121,11 +121,11 @@ Logger.event("some_local_check", {"x": 42})
 | [test/unit/test_inspect_log.gd](test/unit/test_inspect_log.gd) | **Phase 2B Tier B3**:LocalInspectLog autoload(Dict[container_path][entry_uid]→bool);mark/is/clear/hydrate/is_container_fully_inspected API;search_ui 用 lil 替代 entry["inspected"] 字段(cache 策略 — lil 是 source of truth,entry 是 hydrate cache);GameSession.start_round 清空 lil |
 | [test/unit/test_container_opened_sync.gd](test/unit/test_container_opened_sync.gd) | **Phase 2B Tier B4**:container.gd 加 _apply_opened_local 私有方法(给 RPC 调,幂等);open() 多人调 mm.notify_container_opened;MM 加 notify_container_opened (host 直接广播 / client 通过 host 转发) + _rpc_request/apply_container_opened |
 | [test/unit/test_take_rpc.gd](test/unit/test_take_rpc.gd) | **Phase 2B Tier B5**:DragState 加 is_no_remove + begin_no_remove(多人 take 不删源);search_ui 加 _pending_take 字段 + _is_multiplayer/_is_single 助手;_try_drop / _quick_transfer / _on_item_double_clicked 多人 container→inventory 走 _initiate_multi_take(RPC);MM 加 take_granted/take_denied signals + _rpc_request_take/_rpc_take_granted/_rpc_take_denied;is_host 校验 + 找 entry by uid + broadcast_container_entries 后 reply granted |
-| [test/unit/test_round_end_rpc.gd](test/unit/test_round_end_rpc.gd) | **Phase 2B Tier B6**:extraction_zone 多人发 mm._rpc_request_extract;MM 加 _rpc_request_extract(host 校验 + 广播)/ _rpc_apply_round_end(本人撤离 → "extracted" 保留 inv;他人撤离 → "timeout" 清 inv)/ broadcast_round_end_timeout(host timeout RPC);GameSession.tick host timeout 走 broadcast_round_end_timeout |
+| [test/unit/test_round_end_rpc.gd](test/unit/test_round_end_rpc.gd) | **Phase 2B v2 — Per-peer 独立 done + 团队订单结算**:extraction_zone 多人发 mm.request_extract(收集 inv_paths)→ notify_extracted(host 直接调本地 / client rpc_id);MM 加 _peer_round_status / _peer_inventories / _last_team_result / _global_round_active 字段;peer_done / team_result_ready 信号;_rpc_request_peer_done(host 校验 + 广播 + _check_all_done) / _rpc_apply_peer_done(本人 → end_round;其他 → emit signal hide Player) / _rpc_apply_team_result;_check_all_done_and_settle 收集撤离 peer 物品 → completion_for → reward_per_peer 广播;broadcast_round_end_timeout(host timer 到 0 时把所有 playing 标 timeout);host _process 全局 timer(client 不动);broadcast_round_start 重置 per-peer 状态 |
 | [test/unit/test_home_multiplayer.gd](test/unit/test_home_multiplayer.gd) | **Phase 2B Tier B7**:home.gd 加 _ready_toggle / _mp_player_list / _enter_btn 字段;_on_enter 多人 host 调 mm.start_game(单人 change_scene main 旧路径);_on_ready_toggled 调 mm.set_local_ready;订阅 mm.peer_joined/peer_left/all_ready_changed/game_started;_setup_multiplayer_ui 在 _ready 调 |
 | [test/unit/test_restart_round_clean.gd](test/unit/test_restart_round_clean.gd) | **Phase 2B Tier B8**:start_round 重置 _extracted_this_round / _next_entry_uid / time_left / round_active;清 LocalInspectLog;emit round_started;完整 round 重开循环(start → end → start)状态干净;result_panel._on_restart 必须 paused = false 在 change_scene 之前 + clear_active 订单 |
 
-跑全量 = 230 测试 / 709 assert。
+跑全量 = 247 测试 / 770 assert。
 
 ## 已知小 bug(P2,先记录不修)
 

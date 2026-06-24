@@ -535,6 +535,11 @@ func _setup_multiplayer_ui() -> void:
 		mm.all_ready_changed.connect(_mp_on_all_ready)
 	if mm.has_signal("game_started") and not mm.game_started.is_connected(_mp_on_game_started):
 		mm.game_started.connect(_mp_on_game_started)
+	# Phase 2B v2:订阅 peer_done(刷新等待状态)+ team_result_ready(弹结算 popup)
+	if mm.has_signal("peer_done") and not mm.peer_done.is_connected(_mp_on_peer_done_in_home):
+		mm.peer_done.connect(_mp_on_peer_done_in_home)
+	if mm.has_signal("team_result_ready") and not mm.team_result_ready.is_connected(_mp_on_team_result):
+		mm.team_result_ready.connect(_mp_on_team_result)
 	# host 看到"开始下一局"按钮(默认 disabled,等全员 ready)
 	# client 看到"等待 host 开局",enter_btn 隐藏
 	if mm.is_host():
@@ -542,8 +547,21 @@ func _setup_multiplayer_ui() -> void:
 		_enter_btn.disabled = true
 	else:
 		_enter_btn.visible = false
+	# Phase 2B fix bug 4:home 重新加载时 mm.players 可能已有 ready 状态(上局残留 / reset 后等)
+	# 必须根据当前 _all_ready 设置 enter_btn 初始状态(否则 signal 不会再触发)
+	# 同时 ready_toggle 反映本地 player 当前 ready 状态
+	var my_id: int = mm.get_local_peer_id()
+	if mm.players.has(my_id) and _ready_toggle != null:
+		_ready_toggle.button_pressed = bool(mm.players[my_id].get("ready", false))
+	if mm.is_host():
+		_mp_on_all_ready(mm._all_ready())  # 用当前状态初始化按钮(防 signal 错过)
 	_mp_refresh_player_list()
 	_mp_refresh_status()
+	# Phase 2B v2:进 home 时检查是否有未结束的 round / 已就绪的 team result
+	_mp_refresh_round_state()
+	# 主动查 _last_team_result(home 是切场景过来,可能 signal 已过)
+	if not mm._last_team_result.is_empty():
+		_mp_on_team_result(mm._last_team_result)
 
 func _on_ready_toggled(pressed: bool) -> void:
 	var mm = get_node_or_null("/root/MultiplayerManager")
@@ -604,3 +622,83 @@ func _mp_refresh_status() -> void:
 		_mp_status_label.text = "等待全员 ready..."
 	else:
 		_mp_status_label.text = "等待 host 开始下一局..."
+
+# ──────────────────────────────────────────────────────────────
+# Phase 2B v2:home 等待状态 + 团队订单结算 popup
+# ──────────────────────────────────────────────────────────────
+
+func _is_round_in_progress() -> bool:
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null or mm.is_single():
+		return false
+	if mm._peer_round_status.is_empty():
+		return false
+	for pid in mm._peer_round_status.keys():
+		if String(mm._peer_round_status[pid]) == "playing":
+			return true
+	return false
+
+func _mp_refresh_round_state() -> void:
+	# 如果 round 还在进行(其他 peer 还在打)→ disable ready toggle / enter button + 显示等待
+	if _ready_toggle == null or _enter_btn == null:
+		return
+	if _is_round_in_progress():
+		_ready_toggle.disabled = true
+		_ready_toggle.tooltip_text = "等待其他玩家结束本局"
+		_enter_btn.disabled = true
+		if _mp_status_label != null:
+			_mp_status_label.text = "🕐 等待其他玩家结束本局..."
+	else:
+		_ready_toggle.disabled = false
+		_ready_toggle.tooltip_text = ""
+		# enter_btn 状态由 _mp_on_all_ready 控制
+		_mp_refresh_status()
+
+func _mp_on_peer_done_in_home(_peer_id: int, _reason: String) -> void:
+	# 其他 peer done 时刷新等待状态
+	_mp_refresh_round_state()
+
+func _mp_on_team_result(payload: Dictionary) -> void:
+	# 全员 done,弹团队订单结算 popup
+	_show_team_result_popup(payload)
+	_mp_refresh_round_state()
+
+func _show_team_result_popup(payload: Dictionary) -> void:
+	# 用 AcceptDialog 简洁展示
+	var dlg := AcceptDialog.new()
+	dlg.title = "🎯 团队订单结算"
+	var describe: String = String(payload.get("order_describe", "(无订单)"))
+	var required: int = int(payload.get("required", 0))
+	var capped: int = int(payload.get("capped", 0))
+	var ratio: float = float(payload.get("ratio", 0.0))
+	var reward_per_peer: int = int(payload.get("reward_per_peer", 0))
+	var reward_total: int = int(payload.get("reward_total", 0))
+	var per_peer_status: Dictionary = payload.get("per_peer_status", {})
+	# 各 peer 状态摘要
+	var status_lines: Array = []
+	for pid in per_peer_status.keys():
+		var s: String = String(per_peer_status[pid])
+		var icon: String = "✅" if s == "extracted" else "❌"
+		status_lines.append("  %s peer %d: %s" % [icon, int(pid), s])
+	var msg: String = "%s\n\n📦 合计:%d / %d  (完成度 %.0f%%)\n💰 总报酬:%d\n👥 你分到:%d\n\n各人状态:\n%s" % [
+		describe, capped, required, ratio * 100.0, reward_total, reward_per_peer,
+		"\n".join(status_lines)
+	]
+	dlg.dialog_text = msg
+	dlg.set_anchors_preset(Control.PRESET_CENTER)
+	add_child(dlg)
+	dlg.popup_centered(Vector2i(480, 400))
+	# 关掉 popup 时:把 reward 加到本机 stash(简单方案;Phase 2C 再细化)+ 清 mm 缓存
+	dlg.confirmed.connect(func():
+		var stash = get_node_or_null("/root/Stash")
+		if stash != null and stash.has_method("add_money"):
+			stash.add_money(reward_per_peer)
+		# 清 active order(本局已结算)
+		var pool = get_node_or_null("/root/OrderPool")
+		if pool != null:
+			pool.clear_active()
+		var mm = get_node_or_null("/root/MultiplayerManager")
+		if mm != null:
+			mm._last_team_result.clear()
+		dlg.queue_free()
+	)

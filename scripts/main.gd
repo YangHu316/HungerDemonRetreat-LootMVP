@@ -53,7 +53,25 @@ func _ready() -> void:
 			mm.broadcast_round_start()
 	# client:wait for RPC
 
+	# Phase 2B v2:监听 peer_done — 其他 peer 撤离/迷失时隐藏对应 Player 节点
+	if mm != null and mm.has_signal("peer_done") and not mm.peer_done.is_connected(_on_peer_done):
+		mm.peer_done.connect(_on_peer_done)
+
 	call_deferred("_verify_reachability")
+
+# Phase 2B v2:其他 peer 结束本局 → 战局里隐藏对应 Player_<id>
+func _on_peer_done(peer_id: int, _reason: String) -> void:
+	if players_root == null:
+		return
+	var node_name: String = "Player_%d" % peer_id
+	var p = players_root.get_node_or_null(node_name)
+	if p != null and is_instance_valid(p):
+		# Hide(保留节点供同步消息但不可见;也可改 queue_free)
+		p.visible = false
+		# 关掉碰撞,免得挡路
+		if p is CharacterBody3D:
+			(p as CharacterBody3D).collision_layer = 0
+			(p as CharacterBody3D).collision_mask = 0
 
 func _spawn_players() -> void:
 	# Phase 2A:依 MultiplayerManager 状态决定 spawn 数量 + authority

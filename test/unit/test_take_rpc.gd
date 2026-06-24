@@ -72,10 +72,10 @@ func test_mm_request_take_rejects_non_host() -> void:
 	# 必须 broadcast 后 reply granted
 	assert_true(body.contains("broadcast_container_entries"),
 		"_rpc_request_take 通过后必须 broadcast_container_entries(同步所有 peer 容器内容)")
-	assert_true(body.contains("_rpc_take_granted") or body.contains("take_granted.rpc_id"),
-		"_rpc_request_take 通过后必须 reply _rpc_take_granted 给请求方")
-	assert_true(body.contains("_rpc_take_denied") or body.contains("take_denied.rpc_id"),
-		"_rpc_request_take 失败时必须 reply _rpc_take_denied")
+	assert_true(body.contains("_send_take_granted") or body.contains("_rpc_take_granted") or body.contains("take_granted.rpc_id"),
+		"_rpc_request_take 通过后必须 reply granted 给请求方(_send_take_granted host self fix)")
+	assert_true(body.contains("_send_take_denied") or body.contains("_rpc_take_denied") or body.contains("take_denied.rpc_id"),
+		"_rpc_request_take 失败时必须 reply denied(_send_take_denied host self fix)")
 
 # ── search_ui 源码层 ──
 

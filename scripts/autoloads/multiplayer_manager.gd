@@ -22,14 +22,29 @@ signal game_started
 signal take_granted(entry_wire: Dictionary, dest_grid_id: String, dest_x: int, dest_y: int, rotated: bool)
 signal take_denied(container_path: String, entry_uid: int, reason: String)
 # Phase 2B Q2:put-back(背包→容器)对称 RPC
-signal put_granted(item_path: String, source_inv_x: int, source_inv_y: int)
+signal put_granted(item_path: String, source_inv_x: int, source_inv_y: int, container_path: String, new_entry_uid: int)
 signal put_denied(item_path: String, reason: String)
+# Phase 2B v2:per-peer 独立 done + 全员 done 后团队订单结算
+signal peer_done(peer_id: int, reason: String)            # 任一 peer 结束本局(其他 peer 用于 hide Player_X)
+signal team_result_ready(payload: Dictionary)              # 全员 done,订单合计就绪
 
 var mode: int = Mode.SINGLE
 var peer: ENetMultiplayerPeer = null
 # peer_id → {"name": String, "ready": bool, "color": Color}
 var players: Dictionary = {}
 var local_name: String = "Player"
+# Phase 2B v2:per-peer 本局状态(host 权威维护)
+# peer_id → "playing" / "extracted" / "timeout"
+# round 开始时 broadcast_round_start 初始化为全 "playing"
+var _peer_round_status: Dictionary = {}
+# peer_id → Array[String] item resource paths(撤离 peer 上报的背包物品 ResourcePath 列表;timeout 不上报)
+var _peer_inventories: Dictionary = {}
+# Phase 2B v2:最近一次团队订单结算(home 切场景过来时主动查,以防错过 signal)
+var _last_team_result: Dictionary = {}
+# Phase 2B v2:host 全局 round timer(host 即使本人撤了,timer 仍 tick;到 0 触发全员 timeout)
+# 不依赖 gs.tick(host 本人 gs.round_active=false 会停 tick → 其他 peer 永远不 timeout)
+var _global_round_active: bool = false
+var _global_round_time_left: float = 0.0
 
 func _ready() -> void:
 	# 全局 multiplayer signals
@@ -38,6 +53,18 @@ func _ready() -> void:
 	multiplayer.connected_to_server.connect(_on_connected_ok)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
+
+# Phase 2B v2:host 全局 round timer 推进
+func _process(delta: float) -> void:
+	if not is_host():
+		return
+	if not _global_round_active:
+		return
+	_global_round_time_left -= delta
+	if _global_round_time_left <= 0.0:
+		_global_round_time_left = 0.0
+		_global_round_active = false
+		broadcast_round_end_timeout()
 
 # ---------- host / join / leave ----------
 
@@ -154,6 +181,15 @@ func _rpc_start_game() -> void:
 func broadcast_round_start() -> void:
 	if not is_host():
 		return
+	# Phase 2B v2:reset per-peer round status,所有人 "playing"
+	_peer_round_status.clear()
+	_peer_inventories.clear()
+	_last_team_result.clear()
+	# Phase 2B v2:host 启动全局 round timer
+	_global_round_time_left = 900.0
+	_global_round_active = true
+	for pid in players.keys():
+		_peer_round_status[int(pid)] = "playing"
 	var containers_payload: Dictionary = {}
 	# 收集所有 containers 当前的 wire entries
 	# main.gd._on_round_started 已先调过 reset_and_regenerate(host 分支),uid 全新
@@ -177,6 +213,13 @@ func _rpc_apply_round_start(payload: Dictionary) -> void:
 	var gs = get_node_or_null("/root/GameSession")
 	if gs == null:
 		return
+	# Phase 2B v2:client 也 init _peer_round_status(用于 home 查询其他人状态)
+	if not is_host():
+		_peer_round_status.clear()
+		_peer_inventories.clear()
+		_last_team_result.clear()
+		for pid in players.keys():
+			_peer_round_status[int(pid)] = "playing"
 	# Guard:host 已经本地 start_round 过,跳过(避免 round_started 信号重复 emit)
 	if gs.round_active:
 		# host call_local 走这里;同时 host 的 containers 已生成。客户端也不该到这条路径,因为 round_active 仅在 start_round 后 true。
@@ -231,10 +274,15 @@ func request_take(container_path: String, entry_uid: int,
 func request_extract(peer_id: int) -> void:
 	if is_single():
 		return
-	if is_host():
-		_rpc_request_extract(peer_id)
-	else:
-		_rpc_request_extract.rpc_id(1, peer_id)
+	# Phase 2B v2:撤离时收集本地 inventory 物品 path 上报 host(用于团队订单合计)
+	var inv_paths: Array = []
+	var inv = get_node_or_null("/root/PlayerInventory")
+	if inv != null and inv.grid != null:
+		for e in inv.grid.entries:
+			var item: ItemData = e.get("item", null)
+			if item != null and item.resource_path != "":
+				inv_paths.append(item.resource_path)
+	notify_extracted(peer_id, inv_paths)
 
 # Phase 2B Q2 fix:背包→容器放回(对称 take RPC)
 func request_put(container_path: String, item_path: String, freshness: float,
@@ -266,6 +314,37 @@ func _rpc_apply_container_opened(container_path: String) -> void:
 		c._apply_opened_local()
 
 # ──────────────────────────────────────────────────────────────
+# Phase 2B fix bug 6:Door 状态全局同步(host 权威)
+#   - 任 peer interact door → mm.notify_door_toggle(path)
+#   - host 直接广播 _rpc_apply_door_toggle(call_local 自己也跑)
+#   - client 走 _rpc_request_door_toggle 转发给 host
+#   - 各 peer _rpc_apply_door_toggle → 调 door._apply_toggle_local 同步开/关动画
+# ──────────────────────────────────────────────────────────────
+
+func notify_door_toggle(door_path: String) -> void:
+	if is_single():
+		return
+	if is_host():
+		_rpc_apply_door_toggle.rpc(door_path)
+	else:
+		_rpc_request_door_toggle.rpc_id(1, door_path)
+
+@rpc("any_peer", "reliable")
+func _rpc_request_door_toggle(door_path: String) -> void:
+	if not is_host():
+		return
+	var d = get_tree().root.get_node_or_null(NodePath(door_path))
+	if d == null:
+		return
+	_rpc_apply_door_toggle.rpc(door_path)
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_apply_door_toggle(door_path: String) -> void:
+	var d = get_tree().root.get_node_or_null(NodePath(door_path))
+	if d != null and d.has_method("_apply_toggle_local"):
+		d._apply_toggle_local()
+
+# ──────────────────────────────────────────────────────────────
 # Phase 2B Tier B5:Take-item 保守 RPC
 #   Client 想拿物品 → _rpc_request_take 给 host
 #   Host 校验:容器存在 + entry by uid 还在容器内
@@ -288,7 +367,7 @@ func _rpc_request_take(container_path: String, entry_uid: int,
 		sender_id = 1
 	var c = get_tree().root.get_node_or_null(NodePath(container_path))
 	if c == null or c.contents == null:
-		_rpc_take_denied.rpc_id(sender_id, container_path, entry_uid, "容器不存在")
+		_send_take_denied(sender_id, container_path, entry_uid, "容器不存在")
 		return
 	# 找 entry by uid
 	var found_idx: int = -1
@@ -297,12 +376,12 @@ func _rpc_request_take(container_path: String, entry_uid: int,
 			found_idx = i
 			break
 	if found_idx < 0:
-		_rpc_take_denied.rpc_id(sender_id, container_path, entry_uid, "物品已被他人拿走")
+		_send_take_denied(sender_id, container_path, entry_uid, "物品已被他人拿走")
 		return
 	var entry = c.contents.entries[found_idx]
 	var item: ItemData = entry.get("item", null)
 	if item == null:
-		_rpc_take_denied.rpc_id(sender_id, container_path, entry_uid, "物品资源缺失")
+		_send_take_denied(sender_id, container_path, entry_uid, "物品资源缺失")
 		return
 	# 构建 wire entry(给请求方加进背包)
 	var entry_wire: Dictionary = {
@@ -317,8 +396,39 @@ func _rpc_request_take(container_path: String, entry_uid: int,
 	c.contents.remove_entry(entry)
 	# 广播 container entries 更新(所有 peer 看到容器少了这个 entry)
 	broadcast_container_entries(container_path, c.serialize_entries())
-	# Reply granted 给请求方
-	_rpc_take_granted.rpc_id(sender_id, entry_wire, dest_grid_id, dest_x, dest_y, rotated)
+	# Reply granted 给请求方(host self → 直接 emit signal,绕开 rpc_id(self) 不触发 bug)
+	_send_take_granted(sender_id, entry_wire, dest_grid_id, dest_x, dest_y, rotated)
+
+# Phase 2B fix bug 1:host self-RPC reply helper
+# rpc_id(self_id) on @rpc(authority,reliable) without call_local 不在 host 本地触发 →
+# host 自己拿/放物品时,_on_take_granted/put_granted 永远不会跑,导致背包没加 entry
+# 但 container 已 broadcast 删 entry → host 看到的是错位状态
+# Fix:peer_id == local 时直接 emit signal,绕开 rpc 路由
+func _send_take_granted(peer_id: int, entry_wire: Dictionary, dest_grid_id: String,
+		dest_x: int, dest_y: int, rotated: bool) -> void:
+	if peer_id == get_local_peer_id():
+		take_granted.emit(entry_wire, dest_grid_id, dest_x, dest_y, rotated)
+	else:
+		_rpc_take_granted.rpc_id(peer_id, entry_wire, dest_grid_id, dest_x, dest_y, rotated)
+
+func _send_take_denied(peer_id: int, container_path: String, entry_uid: int, reason: String) -> void:
+	if peer_id == get_local_peer_id():
+		take_denied.emit(container_path, entry_uid, reason)
+	else:
+		_rpc_take_denied.rpc_id(peer_id, container_path, entry_uid, reason)
+
+func _send_put_granted(peer_id: int, item_path: String, source_inv_x: int, source_inv_y: int,
+		container_path: String, new_entry_uid: int) -> void:
+	if peer_id == get_local_peer_id():
+		put_granted.emit(item_path, source_inv_x, source_inv_y, container_path, new_entry_uid)
+	else:
+		_rpc_put_granted.rpc_id(peer_id, item_path, source_inv_x, source_inv_y, container_path, new_entry_uid)
+
+func _send_put_denied(peer_id: int, item_path: String, reason: String) -> void:
+	if peer_id == get_local_peer_id():
+		put_denied.emit(item_path, reason)
+	else:
+		_rpc_put_denied.rpc_id(peer_id, item_path, reason)
 
 # Host → 单个请求方:granted,把物品加进自己背包
 @rpc("authority", "reliable")
@@ -349,14 +459,14 @@ func _rpc_request_put(container_path: String, item_path: String, freshness: floa
 		sender_id = 1
 	var c = get_tree().root.get_node_or_null(NodePath(container_path))
 	if c == null or c.contents == null:
-		_rpc_put_denied.rpc_id(sender_id, item_path, "容器不存在")
+		_send_put_denied(sender_id, item_path, "容器不存在")
 		return
 	var item: ItemData = load(item_path) as ItemData
 	if item == null:
-		_rpc_put_denied.rpc_id(sender_id, item_path, "物品资源缺失")
+		_send_put_denied(sender_id, item_path, "物品资源缺失")
 		return
 	if not c.contents.can_place(item, dest_x, dest_y, rotated, null):
-		_rpc_put_denied.rpc_id(sender_id, item_path, "目标位置不可放")
+		_send_put_denied(sender_id, item_path, "目标位置不可放")
 		return
 	# Host 创建 entry(新 uid)
 	var gs = get_node_or_null("/root/GameSession")
@@ -375,74 +485,176 @@ func _rpc_request_put(container_path: String, item_path: String, freshness: floa
 		"inspecting": false,
 	}
 	if not c.contents.place(entry, dest_x, dest_y):
-		_rpc_put_denied.rpc_id(sender_id, item_path, "place 失败")
+		_send_put_denied(sender_id, item_path, "place 失败")
 		return
-	# 广播 container entries 更新
+	# Phase 2B fix bug 2v2:reply granted FIRST(让 sender 在 entries_synced 之前 mark_inspected)
+	# 这样 sender 端 hydrate_container_entries 时,新 uid 已在 log 中 → inspected=true
+	# 不会强制 putter 重新 inspect 自己的物品
+	_send_put_granted(sender_id, item_path, source_inv_x, source_inv_y, container_path, new_uid)
+	# 然后广播 container entries 给所有 peer(其他 peer 看到新物品 → 需 inspect 一次)
 	broadcast_container_entries(container_path, c.serialize_entries())
-	# Reply granted(请求方从背包移除)
-	_rpc_put_granted.rpc_id(sender_id, item_path, source_inv_x, source_inv_y)
 
 @rpc("authority", "reliable")
-func _rpc_put_granted(item_path: String, source_inv_x: int, source_inv_y: int) -> void:
-	put_granted.emit(item_path, source_inv_x, source_inv_y)
+func _rpc_put_granted(item_path: String, source_inv_x: int, source_inv_y: int,
+		container_path: String, new_entry_uid: int) -> void:
+	put_granted.emit(item_path, source_inv_x, source_inv_y, container_path, new_entry_uid)
 
 @rpc("authority", "reliable")
 func _rpc_put_denied(item_path: String, reason: String) -> void:
 	put_denied.emit(item_path, reason)
 
 # ──────────────────────────────────────────────────────────────
-# Phase 2B Tier B6:Round end host-authoritative
-#   任一 peer 撤离 → host 收到 _rpc_request_extract → 广播 _rpc_apply_round_end
-#   timeout 也 host 触发(GameSession.tick host 决定,调 broadcast_round_end_timeout)
-#   各 peer 收到 _rpc_apply_round_end:
-#     - if local_peer_id == extracted_by → mark + end_round("extracted")(保留 inventory)
-#     - else → end_round("timeout")(清 inventory,迷失结算)
+# Phase 2B v2 — Per-peer 独立 done + 全员 done 后团队订单结算
+#   流程:
+#     1. peer 撤离 → mm.notify_extracted(peer_id, inv_paths) → host
+#     2. peer timeout(host 时钟) → host 主动给该 peer 标 "timeout"
+#     3. 各 peer 收 _rpc_apply_peer_done(id, reason):
+#         本人 → 自己 end_round;其他 peer → emit signal 让 main.gd 隐藏 Player_<id>
+#     4. host 检查全员 done → 计算订单合计 → _rpc_apply_team_result 广播
+#     5. home 监听 team_result_ready → 显示团队订单 popup + reward
 # ──────────────────────────────────────────────────────────────
 
-# Client → Host:我撤离成功了
+# 撤离的 peer 调:把自己的 inventory 物品 path 上报给 host
+# host: 直接调本地处理。client: rpc_id(1, ...)
+func notify_extracted(peer_id: int, inv_paths: Array) -> void:
+	if is_single():
+		return
+	if is_host():
+		_rpc_request_peer_done(peer_id, "extracted", inv_paths)
+	else:
+		_rpc_request_peer_done.rpc_id(1, peer_id, "extracted", inv_paths)
+
+# host 检查全员 done 时调,触发结算广播
+func _check_all_done_and_settle() -> void:
+	if not is_host():
+		return
+	for pid in _peer_round_status.keys():
+		if String(_peer_round_status[pid]) == "playing":
+			return  # 还有人在打
+	# 全员 done — 计算订单合计
+	var pool = get_node_or_null("/root/OrderPool")
+	var payload: Dictionary = {
+		"per_peer_status": _peer_round_status.duplicate(),
+		"order_describe": "",
+		"required": 0,
+		"capped": 0,
+		"matched": 0,
+		"ratio": 0.0,
+		"reward_total": 0,
+		"reward_per_peer": 0,
+	}
+	if pool != null and pool.has_active():
+		var active = pool.get_active()
+		# 收集所有撤离 peer 的物品(timeout peer 不贡献)
+		var all_items: Array = []
+		for pid in _peer_inventories.keys():
+			var paths: Array = _peer_inventories[pid]
+			for p in paths:
+				var item: ItemData = load(String(p)) as ItemData
+				if item != null:
+					all_items.append(item)
+		var r: Dictionary = active.completion_for(all_items)
+		payload["order_describe"] = active.describe()
+		payload["required"] = int(r.get("required", 0))
+		payload["capped"] = int(r.get("capped", 0))
+		payload["matched"] = int(r.get("matched", 0))
+		payload["ratio"] = float(r.get("ratio", 0.0))
+		var reward_total: int = int(round(active.reward_base * float(r.get("ratio", 0.0))))
+		var n: int = max(1, _peer_round_status.size())
+		payload["reward_total"] = reward_total
+		payload["reward_per_peer"] = int(reward_total / n)
+	# 广播
+	if multiplayer.multiplayer_peer == null:
+		_rpc_apply_team_result(payload)
+	else:
+		_rpc_apply_team_result.rpc(payload)
+	# Phase 2B fix bug 4:round 结束后重置所有 peer 的 ready 状态(host 权威)
+	# 让下一局必须重新点 ready 才能开始,且 home 加载时按钮初始 disabled 状态正确
+	if multiplayer.multiplayer_peer == null:
+		_rpc_reset_all_ready()
+	else:
+		_rpc_reset_all_ready.rpc()
+
+# Client → Host:我结束本局了(reason=extracted/timeout),附背包物品 path
 @rpc("any_peer", "reliable")
-func _rpc_request_extract(peer_id: int) -> void:
+func _rpc_request_peer_done(peer_id: int, reason: String, inv_paths: Array) -> void:
 	if not is_host():
 		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	if sender_id == 0:
-		sender_id = 1  # host self-call
-	# Trust client peer_id == sender_id(简化,Phase 2D 防作弊再校)
-	var actual_extracted: int = peer_id if peer_id == sender_id else sender_id
-	# 广播:任一 peer 撤离即结束 round
-	_rpc_apply_round_end.rpc("extracted", actual_extracted)
+		sender_id = 1
+	# Trust sender 提供的 peer_id == 自己
+	var actual_id: int = peer_id if peer_id == sender_id else sender_id
+	if not _peer_round_status.has(actual_id):
+		return  # 不在 round 内,丢弃
+	if String(_peer_round_status[actual_id]) != "playing":
+		return  # 已 done,幂等
+	_peer_round_status[actual_id] = reason
+	if reason == "extracted":
+		_peer_inventories[actual_id] = inv_paths
+	# 广播 "X 结束了" 给所有 peer
+	if multiplayer.multiplayer_peer == null:
+		_rpc_apply_peer_done(actual_id, reason)
+	else:
+		_rpc_apply_peer_done.rpc(actual_id, reason)
+	# 检查全员 done
+	_check_all_done_and_settle()
 
-# host 在 timeout 时也调,广播给所有 peer(含自己 via call_local)
+# Host → All peers:peer X 结束本局
+# 各 peer:
+#   - 本人 X → 自己 end_round(单人式)
+#   - 其他人 → emit signal,main.gd hide 对应 Player 节点
+@rpc("authority", "call_local", "reliable")
+func _rpc_apply_peer_done(peer_id: int, reason: String) -> void:
+	# 所有 peer 都更新本地 _peer_round_status(用于 home 查询)
+	_peer_round_status[peer_id] = reason
+	var my_id: int = get_local_peer_id()
+	if peer_id == my_id:
+		var gs = get_node_or_null("/root/GameSession")
+		if gs != null and gs.round_active:
+			if reason == "extracted":
+				gs.mark_extracted_this_round()
+				gs.end_round("extracted")
+			else:
+				gs.end_round("timeout")
+	else:
+		# 其他 peer 结束 → 通知 main 隐藏对应 Player
+		peer_done.emit(peer_id, reason)
+
+# Host → All peers:全员 done,团队订单结算 payload
+@rpc("authority", "call_local", "reliable")
+func _rpc_apply_team_result(payload: Dictionary) -> void:
+	_last_team_result = payload
+	team_result_ready.emit(payload)
+
+# Phase 2B fix bug 4:round 结束后所有 peer ready 状态重置
+# 否则上一局的 ready=true 残留 → home 重新加载时 _all_ready 已 true → all_ready_changed
+# 不会再触发 → host 的"开始下一局"按钮永远 disabled,无法开下一局
+@rpc("authority", "call_local", "reliable")
+func _rpc_reset_all_ready() -> void:
+	for pid in players.keys():
+		players[pid]["ready"] = false
+	# 本地 ready 状态变(false)→ 通知 UI
+	local_ready_changed.emit(false)
+	# 全员 ready 状态变(应为 false)→ 通知 host UI 更新按钮
+	_recheck_all_ready()
+
+# Host tick timeout 时调:对所有 status="playing" 的 peer 标记 timeout 并广播
 func broadcast_round_end_timeout() -> void:
 	if not is_host():
 		return
-	# 测试 / mock 模式(无真实 peer):call_local 不触发,直接调
-	if multiplayer.multiplayer_peer == null:
-		_rpc_apply_round_end("timeout", -1)
-	else:
-		_rpc_apply_round_end.rpc("timeout", -1)
-
-# Host → All peers 广播:本局结束。
-# extracted_by = 撤离者 peer_id;timeout 时 = -1
-@rpc("authority", "call_local", "reliable")
-func _rpc_apply_round_end(reason: String, extracted_by: int) -> void:
-	var gs = get_node_or_null("/root/GameSession")
-	if gs == null:
-		return
-	if not gs.round_active:
-		return  # 已结束,幂等
-	var my_id: int = get_local_peer_id()
-	# Phase 2B Q5 决定 A:谁撤离谁结束;没撤的视为迷失
-	if reason == "extracted" and extracted_by == my_id:
-		# 我撤了 → 保留 inventory
-		gs.mark_extracted_this_round()
-		gs.end_round("extracted")
-	elif reason == "extracted":
-		# 别人撤了 → 我迷失,清 inventory
-		gs.end_round("timeout")
-	else:
-		# reason == "timeout":全员都迷失
-		gs.end_round("timeout")
+	for pid in _peer_round_status.keys():
+		var pid_int: int = int(pid)
+		if String(_peer_round_status[pid_int]) != "playing":
+			continue
+		_peer_round_status[pid_int] = "timeout"
+		# 广播给所有 peer
+		if multiplayer.multiplayer_peer == null:
+			_rpc_apply_peer_done(pid_int, "timeout")
+		else:
+			_rpc_apply_peer_done.rpc(pid_int, "timeout")
+	# 全员 timeout → 触发结算
+	_check_all_done_and_settle()
 
 # ---------- 公共 API ----------
 

@@ -91,14 +91,23 @@ func test_request_helpers_branch_on_host() -> void:
 	assert_true(body.contains("rpc_id(1"),
 		"client 分支必须 .rpc_id(1, ...)")
 
-	# request_extract 同样
+	# request_extract:Phase 2B v2 重构后,委托给 notify_extracted(后者按 is_host 分支)
+	# request_extract 本身只负责收集 inventory paths
 	var i2: int = src.find("func request_extract")
 	assert_gte(i2, 0)
 	var j2: int = src.find("\nfunc ", i2 + 5)
 	if j2 < 0: j2 = src.length()
 	var body2: String = src.substr(i2, j2 - i2)
-	assert_true(body2.contains("is_host"),
-		"request_extract 必须按 is_host 分支")
+	assert_true(body2.contains("notify_extracted"),
+		"request_extract 必须委托给 notify_extracted(收集 inv_paths 后上报)")
+	# notify_extracted 才是真正按 is_host 分支的 helper
+	var i3: int = src.find("func notify_extracted")
+	assert_gte(i3, 0)
+	var j3: int = src.find("\nfunc ", i3 + 5)
+	if j3 < 0: j3 = src.length()
+	var body3: String = src.substr(i3, j3 - i3)
+	assert_true(body3.contains("is_host"),
+		"notify_extracted 必须按 is_host 分支(host self-RPC fix)")
 
 # ── Q4:Home 多人 UI 浮动 panel ──
 

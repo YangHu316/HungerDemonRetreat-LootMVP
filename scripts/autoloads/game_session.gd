@@ -88,18 +88,13 @@ func tick(delta: float) -> void:
 	_advance_inventory_freshness(delta)
 	if time_left <= 0.0:
 		time_left = 0.0
-		# Phase 2B:timeout 触发只 host(or 单人) 决定。
-		# client 的 tick 也减时钟用于 UI 同步,但不直接 end_round —
-		# 等 host 广播 _rpc_apply_round_end("timeout") 时统一结束。
+		# Phase 2B v2:多人模式 timer 由 MM._process 推进(host 全局 timer)
+		# gs.tick 在多人下不再触发 timeout — 由 MM 决定全员是否 timeout
+		# 单人:gs.tick 直接 end_round("timeout")
 		var mm = get_node_or_null("/root/MultiplayerManager")
-		if mm == null or not mm.has_method("is_client") or not mm.is_client():
-			# 单人 or host
-			if mm != null and mm.has_method("is_host") and mm.is_host():
-				# 多人 host:走 RPC 广播,call_local 让自己也 end_round
-				mm.broadcast_round_end_timeout()
-			else:
-				# 单人:直接 end_round
-				end_round("timeout")
+		if mm == null or (mm.has_method("is_single") and mm.is_single()):
+			end_round("timeout")
+		# 多人(host or client):啥也不做,等 mm.broadcast_round_end_timeout
 
 func _advance_inventory_freshness(delta: float) -> void:
 	var inv = get_node_or_null("/root/PlayerInventory")

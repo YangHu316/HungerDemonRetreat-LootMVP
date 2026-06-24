@@ -112,15 +112,18 @@ func test_tick_timeout_in_client_mode_does_not_trigger_end_round() -> void:
 	# cleanup
 	_gs.round_active = false
 
-func test_tick_timeout_in_host_mode_triggers_end_round() -> void:
-	# 多人 host:tick 减时钟到 0 → 本地 end_round
-	# (B6 再改 RPC 广播;B1 阶段 host 直接调,等价单人)
+func test_tick_timeout_in_host_mode_does_not_trigger_end_round() -> void:
+	# Phase 2B v2:多人模式 host gs.tick 不再本地 end_round
+	# 全局 timer 由 mm._process 推进(host 即使本人撤了,仍要 tick 等其他 peer)
+	# host 的 gs.tick 在多人下与 client 同 — 减 time_left 但不 end_round
 	_mm.mode = _mm.Mode.HOST
 	_gs.start_round()
 	_gs.time_left = 0.1
 	_gs.tick(1.0)
-	assert_false(_gs.round_active,
-		"多人 host tick timeout 触发本地 end_round")
+	assert_true(_gs.round_active,
+		"多人 host gs.tick timeout 不能本地 end_round(全局 timer 由 mm._process 决定)")
+	# cleanup
+	_gs.round_active = false
 
 # ── main.gd 源码层验证 ──
 
