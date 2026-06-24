@@ -18,6 +18,9 @@ signal disconnected_from_server
 signal local_ready_changed(ready: bool)
 signal all_ready_changed(all_ready: bool)
 signal game_started
+# Phase 2B Tier B5:take-item RPC 回调 → search_ui 监听
+signal take_granted(entry_wire: Dictionary, dest_grid_id: String, dest_x: int, dest_y: int, rotated: bool)
+signal take_denied(container_path: String, entry_uid: int, reason: String)
 
 var mode: int = Mode.SINGLE
 var peer: ENetMultiplayerPeer = null
@@ -158,7 +161,12 @@ func broadcast_round_start() -> void:
 		"round_time": 900.0,
 		"containers": containers_payload,
 	}
-	_rpc_apply_round_start.rpc(payload)
+	# 测试 / mock 模式(无真实 peer):.rpc() 不触发 call_local,直接本地调用
+	if multiplayer.multiplayer_peer == null:
+		# host 已本地 start_round 过,_rpc_apply_round_start 内部 round_active guard 会跳过 — OK
+		_rpc_apply_round_start(payload)
+	else:
+		_rpc_apply_round_start.rpc(payload)
 
 # host 广播给所有 peer(host 也通过 call_local 进来,但 round_active 已 true → guard 跳过)
 @rpc("authority", "call_local", "reliable")
@@ -189,6 +197,160 @@ func _rpc_apply_container_entries(container_path: String, wire_entries: Array) -
 	var c = get_tree().root.get_node_or_null(NodePath(container_path))
 	if c != null and c.has_method("apply_entries"):
 		c.apply_entries(wire_entries)
+
+# ──────────────────────────────────────────────────────────────
+# Phase 2B Tier B4:has_been_opened 全局同步(已搜 badge 给所有 peer)
+# ──────────────────────────────────────────────────────────────
+
+# Container.open() 多人模式调:host 直接广播,client 通过 host 转发
+func notify_container_opened(container_path: String) -> void:
+	if is_single():
+		return  # 不该被单人调
+	if is_host():
+		# host 直接广播(包含 host 自己 via call_local)
+		_rpc_apply_container_opened.rpc(container_path)
+	else:
+		# client 发请求给 host
+		_rpc_request_container_opened.rpc_id(1, container_path)
+
+# Client → Host 请求"我开了 path 这个容器"
+@rpc("any_peer", "reliable")
+func _rpc_request_container_opened(container_path: String) -> void:
+	if not is_host():
+		return  # 只 host 处理
+	var c = get_tree().root.get_node_or_null(NodePath(container_path))
+	if c == null:
+		return
+	if "has_been_opened" in c and c.has_been_opened:
+		return  # 已标过,不重复广播
+	_rpc_apply_container_opened.rpc(container_path)
+
+# Host → All peers 广播"标记 path 容器已搜"
+@rpc("authority", "call_local", "reliable")
+func _rpc_apply_container_opened(container_path: String) -> void:
+	var c = get_tree().root.get_node_or_null(NodePath(container_path))
+	if c != null and c.has_method("_apply_opened_local"):
+		c._apply_opened_local()
+
+# ──────────────────────────────────────────────────────────────
+# Phase 2B Tier B5:Take-item 保守 RPC
+#   Client 想拿物品 → _rpc_request_take 给 host
+#   Host 校验:容器存在 + entry by uid 还在容器内
+#   通过:从 container 移 entry,broadcast 全员 entries 更新,reply granted 给请求方
+#   失败:reply denied(toast 拿取失败)
+#   注:背包 can_place 校验 trust client(plan §关键不确定点 5,Phase 2D/E 再防作弊)
+# ──────────────────────────────────────────────────────────────
+
+# Client → Host:请求拿物品
+@rpc("any_peer", "reliable")
+func _rpc_request_take(container_path: String, entry_uid: int,
+		dest_grid_id: String, dest_x: int, dest_y: int, rotated: bool) -> void:
+	if not is_host():
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	# host call_local 不会进这里(没 call_local),但 host 自己也要能 take →
+	# 经 _initiate_multi_take 走 rpc_id(1, ...);targeting peer 1 from peer 1 in Godot
+	# 会本地调度(同进程内 RPC 不走 net)。sender_id 此时是 0(本机调用)。
+	if sender_id == 0:
+		sender_id = 1
+	var c = get_tree().root.get_node_or_null(NodePath(container_path))
+	if c == null or c.contents == null:
+		_rpc_take_denied.rpc_id(sender_id, container_path, entry_uid, "容器不存在")
+		return
+	# 找 entry by uid
+	var found_idx: int = -1
+	for i in range(c.contents.entries.size()):
+		if int(c.contents.entries[i].get("uid", -1)) == entry_uid:
+			found_idx = i
+			break
+	if found_idx < 0:
+		_rpc_take_denied.rpc_id(sender_id, container_path, entry_uid, "物品已被他人拿走")
+		return
+	var entry = c.contents.entries[found_idx]
+	var item: ItemData = entry.get("item", null)
+	if item == null:
+		_rpc_take_denied.rpc_id(sender_id, container_path, entry_uid, "物品资源缺失")
+		return
+	# 构建 wire entry(给请求方加进背包)
+	var entry_wire: Dictionary = {
+		"uid": entry_uid,
+		"item_path": item.resource_path,
+		"x": dest_x,
+		"y": dest_y,
+		"rotated": rotated,
+		"freshness_elapsed": float(entry.get("freshness_elapsed", 0.0)),
+	}
+	# 从 container 移除
+	c.contents.remove_entry(entry)
+	# 广播 container entries 更新(所有 peer 看到容器少了这个 entry)
+	broadcast_container_entries(container_path, c.serialize_entries())
+	# Reply granted 给请求方
+	_rpc_take_granted.rpc_id(sender_id, entry_wire, dest_grid_id, dest_x, dest_y, rotated)
+
+# Host → 单个请求方:granted,把物品加进自己背包
+@rpc("authority", "reliable")
+func _rpc_take_granted(entry_wire: Dictionary, dest_grid_id: String,
+		dest_x: int, dest_y: int, rotated: bool) -> void:
+	take_granted.emit(entry_wire, dest_grid_id, dest_x, dest_y, rotated)
+
+# Host → 单个请求方:denied,UI 解锁 + toast
+@rpc("authority", "reliable")
+func _rpc_take_denied(container_path: String, entry_uid: int, reason: String) -> void:
+	take_denied.emit(container_path, entry_uid, reason)
+
+# ──────────────────────────────────────────────────────────────
+# Phase 2B Tier B6:Round end host-authoritative
+#   任一 peer 撤离 → host 收到 _rpc_request_extract → 广播 _rpc_apply_round_end
+#   timeout 也 host 触发(GameSession.tick host 决定,调 broadcast_round_end_timeout)
+#   各 peer 收到 _rpc_apply_round_end:
+#     - if local_peer_id == extracted_by → mark + end_round("extracted")(保留 inventory)
+#     - else → end_round("timeout")(清 inventory,迷失结算)
+# ──────────────────────────────────────────────────────────────
+
+# Client → Host:我撤离成功了
+@rpc("any_peer", "reliable")
+func _rpc_request_extract(peer_id: int) -> void:
+	if not is_host():
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if sender_id == 0:
+		sender_id = 1  # host self-call
+	# Trust client peer_id == sender_id(简化,Phase 2D 防作弊再校)
+	var actual_extracted: int = peer_id if peer_id == sender_id else sender_id
+	# 广播:任一 peer 撤离即结束 round
+	_rpc_apply_round_end.rpc("extracted", actual_extracted)
+
+# host 在 timeout 时也调,广播给所有 peer(含自己 via call_local)
+func broadcast_round_end_timeout() -> void:
+	if not is_host():
+		return
+	# 测试 / mock 模式(无真实 peer):call_local 不触发,直接调
+	if multiplayer.multiplayer_peer == null:
+		_rpc_apply_round_end("timeout", -1)
+	else:
+		_rpc_apply_round_end.rpc("timeout", -1)
+
+# Host → All peers 广播:本局结束。
+# extracted_by = 撤离者 peer_id;timeout 时 = -1
+@rpc("authority", "call_local", "reliable")
+func _rpc_apply_round_end(reason: String, extracted_by: int) -> void:
+	var gs = get_node_or_null("/root/GameSession")
+	if gs == null:
+		return
+	if not gs.round_active:
+		return  # 已结束,幂等
+	var my_id: int = get_local_peer_id()
+	# Phase 2B Q5 决定 A:谁撤离谁结束;没撤的视为迷失
+	if reason == "extracted" and extracted_by == my_id:
+		# 我撤了 → 保留 inventory
+		gs.mark_extracted_this_round()
+		gs.end_round("extracted")
+	elif reason == "extracted":
+		# 别人撤了 → 我迷失,清 inventory
+		gs.end_round("timeout")
+	else:
+		# reason == "timeout":全员都迷失
+		gs.end_round("timeout")
 
 # ---------- 公共 API ----------
 

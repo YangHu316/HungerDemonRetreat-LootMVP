@@ -93,7 +93,13 @@ func tick(delta: float) -> void:
 		# 等 host 广播 _rpc_apply_round_end("timeout") 时统一结束。
 		var mm = get_node_or_null("/root/MultiplayerManager")
 		if mm == null or not mm.has_method("is_client") or not mm.is_client():
-			end_round("timeout")
+			# 单人 or host
+			if mm != null and mm.has_method("is_host") and mm.is_host():
+				# 多人 host:走 RPC 广播,call_local 让自己也 end_round
+				mm.broadcast_round_end_timeout()
+			else:
+				# 单人:直接 end_round
+				end_round("timeout")
 
 func _advance_inventory_freshness(delta: float) -> void:
 	var inv = get_node_or_null("/root/PlayerInventory")

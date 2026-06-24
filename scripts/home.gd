@@ -20,6 +20,12 @@ var _candidate_label: Label
 var _accept_btn: Button
 var _refresh_btn: Button
 
+# Phase 2B Tier B7:多人 ready 流(home → 下一把)
+var _enter_btn: Button = null              # 共用按钮(单人:进入战局;多人:开始下一局/等 host)
+var _ready_toggle: CheckBox = null         # 多人 ready 开关(单人时隐藏)
+var _mp_player_list: VBoxContainer = null  # 多人玩家列表(显示各人 ready 状态)
+var _mp_status_label: Label = null         # 多人状态提示(等 host / 全员 ready 等)
+
 func _ready() -> void:
 	_build_ui()
 	var stash = get_node("/root/Stash")
@@ -34,6 +40,8 @@ func _ready() -> void:
 	if not pool.active_changed.is_connected(_refresh_orders):
 		pool.active_changed.connect(_refresh_orders)
 	_refresh_orders()
+	# Phase 2B Tier B7:多人 ready 流接线
+	_setup_multiplayer_ui()
 
 func _build_ui() -> void:
 	var bg := ColorRect.new()
@@ -141,6 +149,37 @@ func _build_ui() -> void:
 	enter_btn.add_theme_font_size_override("font_size", 22)
 	enter_btn.pressed.connect(_on_enter)
 	vbox.add_child(enter_btn)
+	_enter_btn = enter_btn
+
+	# Phase 2B Tier B7:多人 ready 流 UI(单人时全部隐藏)
+	# Ready toggle + 玩家列表 + 状态文字
+	var mp_box := HBoxContainer.new()
+	mp_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	mp_box.add_theme_constant_override("separation", 24)
+	vbox.add_child(mp_box)
+
+	_ready_toggle = CheckBox.new()
+	_ready_toggle.text = "✓ 准备就绪"
+	_ready_toggle.add_theme_font_size_override("font_size", 18)
+	_ready_toggle.toggled.connect(_on_ready_toggled)
+	mp_box.add_child(_ready_toggle)
+
+	var list_box := VBoxContainer.new()
+	list_box.custom_minimum_size = Vector2(280, 0)
+	mp_box.add_child(list_box)
+	var list_title := Label.new()
+	list_title.text = "玩家列表"
+	list_title.add_theme_font_size_override("font_size", 14)
+	list_title.modulate = Color(0.7, 0.85, 1.0)
+	list_box.add_child(list_title)
+	_mp_player_list = VBoxContainer.new()
+	list_box.add_child(_mp_player_list)
+
+	_mp_status_label = Label.new()
+	_mp_status_label.add_theme_font_size_override("font_size", 14)
+	_mp_status_label.modulate = Color(0.85, 0.85, 0.5)
+	_mp_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(_mp_status_label)
 
 	# DragLayer 在最上面,放 ghost 和 highlight
 	_drag_layer = Control.new()
@@ -408,10 +447,21 @@ func _flash_red(view: Control) -> void:
 	tw.tween_property(view, "modulate", Color(1, 1, 1, 1), 0.3)
 
 func _on_enter() -> void:
-	get_tree().change_scene_to_file("res://scenes/main.tscn")
+	# Phase 2B Tier B7:多人模式下,host 才能调 mm.start_game(全员 ready 时);
+	# client 此按钮被隐藏(只能 ready),实际不会进这里
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null or (mm.has_method("is_single") and mm.is_single()):
+		# 单人:旧行为
+		get_tree().change_scene_to_file("res://scenes/main.tscn")
+		return
+	# 多人 host:调 mm.start_game(MM 内部 _all_ready 校验 + RPC 广播 _rpc_start_game)
+	if mm.is_host():
+		mm.start_game()
+		# 注意:mm._rpc_start_game 自动 change_scene_to_file("main.tscn"),host 也通过 call_local 走
 
 func _on_back_to_menu() -> void:
 	# 切回主菜单 — 不清 stash/inventory(玩家的存档保留)
+	# Phase 2B:多人也不主动 leave_room,让用户手动决定
 	get_tree().change_scene_to_file("res://scenes/menu.tscn")
 
 func _on_accept_order() -> void:
@@ -436,3 +486,97 @@ func _refresh_orders() -> void:
 		_candidate_label.text = "(空)"
 	# 已有 active 时禁用接单按钮
 	_accept_btn.disabled = (active != null) or (cand == null)
+
+# ──────────────────────────────────────────────────────────────
+# Phase 2B Tier B7:多人 ready 流
+# ──────────────────────────────────────────────────────────────
+
+func _setup_multiplayer_ui() -> void:
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null or (mm.has_method("is_single") and mm.is_single()):
+		# 单人:隐藏 ready toggle / 玩家列表 / 状态文字。enter_btn 保持原样。
+		if _ready_toggle != null:
+			_ready_toggle.visible = false
+		if _mp_player_list != null:
+			_mp_player_list.get_parent().visible = false
+		if _mp_status_label != null:
+			_mp_status_label.visible = false
+		return
+	# 多人:订阅 mm 信号 + 初始化 UI
+	if mm.has_signal("peer_joined") and not mm.peer_joined.is_connected(_mp_on_peer_changed):
+		mm.peer_joined.connect(_mp_on_peer_changed)
+	if mm.has_signal("peer_left") and not mm.peer_left.is_connected(_mp_on_peer_left):
+		mm.peer_left.connect(_mp_on_peer_left)
+	if mm.has_signal("all_ready_changed") and not mm.all_ready_changed.is_connected(_mp_on_all_ready):
+		mm.all_ready_changed.connect(_mp_on_all_ready)
+	if mm.has_signal("game_started") and not mm.game_started.is_connected(_mp_on_game_started):
+		mm.game_started.connect(_mp_on_game_started)
+	# host 看到"开始下一局"按钮(默认 disabled,等全员 ready)
+	# client 看到"等待 host 开局",enter_btn 隐藏
+	if mm.is_host():
+		_enter_btn.text = "开始下一局(等待全员 ready)"
+		_enter_btn.disabled = true
+	else:
+		_enter_btn.visible = false
+	_mp_refresh_player_list()
+	_mp_refresh_status()
+
+func _on_ready_toggled(pressed: bool) -> void:
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null or (mm.has_method("is_single") and mm.is_single()):
+		return
+	mm.set_local_ready(pressed)
+
+func _mp_on_peer_changed(_id: int, _info: Dictionary) -> void:
+	_mp_refresh_player_list()
+	_mp_refresh_status()
+
+func _mp_on_peer_left(_id: int) -> void:
+	_mp_refresh_player_list()
+	_mp_refresh_status()
+
+func _mp_on_all_ready(all_ready: bool) -> void:
+	_mp_refresh_player_list()
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null or _enter_btn == null:
+		return
+	if mm.is_host():
+		_enter_btn.disabled = not all_ready
+		_enter_btn.text = "开始下一局" if all_ready else "开始下一局(等待全员 ready)"
+	if _mp_status_label != null:
+		_mp_status_label.text = "全员就绪 — host 可开始" if all_ready else "等待全员 ready..."
+
+func _mp_on_game_started() -> void:
+	# host 触发的 _rpc_start_game 已 change_scene_to_file("main.tscn"),
+	# 这里再一次防御(如果 home 没接到 _rpc_start_game 的 call_local,手动跳)
+	get_tree().change_scene_to_file("res://scenes/main.tscn")
+
+func _mp_refresh_player_list() -> void:
+	if _mp_player_list == null:
+		return
+	for c in _mp_player_list.get_children():
+		c.queue_free()
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null:
+		return
+	var ids: Array = mm.players.keys()
+	ids.sort()
+	for pid in ids:
+		var info: Dictionary = mm.players[pid]
+		var lbl := Label.new()
+		var ready_mark: String = "✓" if bool(info.get("ready", false)) else "·"
+		var name_str: String = String(info.get("name", "Player%d" % pid))
+		lbl.text = "%s [%d] %s" % [ready_mark, pid, name_str]
+		lbl.modulate = Color(0.5, 1.0, 0.5) if bool(info.get("ready", false)) else Color(0.85, 0.85, 0.85)
+		_mp_player_list.add_child(lbl)
+
+func _mp_refresh_status() -> void:
+	if _mp_status_label == null:
+		return
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null:
+		return
+	if mm.is_host():
+		_mp_status_label.text = "等待全员 ready..."
+	else:
+		_mp_status_label.text = "等待 host 开始下一局..."

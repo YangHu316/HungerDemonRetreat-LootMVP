@@ -6,9 +6,9 @@
 
 - **引擎**: Godot 4.6(本地用 4.6.2/4.6.3,CI 锁 4.6.2)
 - **类型**: 3D 斜俯视 + 网格搜刮（"饿魔退散"MVP）
-- **autoload**: `EventBus` / `GameSession` / `PlayerInventory`(本地玩家代理) / `Stamina`(本地玩家代理) / `Logger` / `Stash` / `OrderPool` / `MultiplayerManager`(LAN host/client + 大厅)
+- **autoload**: `EventBus` / `GameSession` / `PlayerInventory`(本地玩家代理) / `Stamina`(本地玩家代理) / `Logger` / `Stash` / `OrderPool` / `MultiplayerManager`(LAN host/client + 大厅) / `LocalInspectLog`(per-peer inspect 状态)
 - **per-player 组件**: `InventoryComp` / `StaminaComp` 挂在 Player 节点下 — autoload 只是 forward 层
-- **联机进度(Phase 2A 完)**: ENet host/client + 大厅 + Player 动态 spawn(MultiplayerSpawner-free,各 peer 本地按 mm.players 实例化) + MultiplayerSynchronizer 同步 global_position/BodyRoot:rotation/current_stance。**容器/背包/订单同步在 Phase 2B/C/D 跟进**。
+- **联机进度(Phase 2B 完)**: ENet host/client + 大厅 + Player 动态 spawn + 同步(global_position/BodyRoot:rotation/current_stance) + **容器 host 权威 entries 同步(uid 跨 peer)** + **per-peer inspect log**(每人独立放大镜动画)+ **已搜 badge 全局共享**(任一 peer 开过 → 所有 peer 看到)+ **取物保守 RPC**(client 发请求 → host 验证 + 广播 + reply granted/denied)+ **Round end host 权威**(任一 peer 撤离 → 全员回 home,本人保留 inv,他人迷失)+ **Home 多人 ready 流**(全员 ready → host 开下一局)。**背包/Stash 各人独立**(per-machine,无需同步)。**订单合计留 Phase 2C**。
 - **入口**: `res://scenes/menu.tscn` → home.tscn(单人) / 联机模式占位 → main.tscn(战局)
 - **不要手改的**: `project_state.md`(auto-gen)、`.godot/`(cache)
 
@@ -116,8 +116,16 @@ Logger.event("some_local_check", {"x": 42})
 | [test/unit/test_lobby_ui.gd](test/unit/test_lobby_ui.gd) | **Phase 2A 大厅**:lobby.gd 必须调 MM.host_room/join_room/leave_room/set_local_ready/start_game,有返回菜单接线 |
 | [test/unit/test_player_authority.gd](test/unit/test_player_authority.gd) | **Phase 2A Player 权限**:player.gd `_input` 和 `_physics_process` 必须以 `if not is_multiplayer_authority(): return` 开头(否则远端 peer 的 Player 也会响应本地输入,网络混乱) |
 | [test/unit/test_main_dynamic_spawn.gd](test/unit/test_main_dynamic_spawn.gd) | **Phase 2A Tier 3-5 架构**:main.tscn 不能有 hardcoded $Player(必须 PlayersRoot 容器+动态 spawn) / main.gd preload player.tscn + _spawn_players + 多人调 set_multiplayer_authority / player.tscn 必挂 MultiplayerSynchronizer 同步 global_position/BodyRoot:rotation/current_stance / player.gd._ready 不能自动 register PlayerInventory(多人会覆盖本地指针,改由 main.gd._bind_local 显式 register) |
+| [test/unit/test_round_lifecycle_rpc.gd](test/unit/test_round_lifecycle_rpc.gd) | **Phase 2B Tier B1**:GameSession 加 _extracted_this_round / _next_entry_uid;tick timeout multi client 不本地结束(等 host 广播);MM 加 broadcast_round_start + _rpc_apply_round_start;main.gd._ready 按 mm.mode 决定本地 start_round vs 等 RPC |
+| [test/unit/test_container_sync.gd](test/unit/test_container_sync.gd) | **Phase 2B Tier B2**:container 加 entry uid(host 从 gs.next_entry_uid 分配);加 serialize_entries / apply_entries(wire 用 item_path 跨网);_ready 多人 client 跳过 _generate_contents;main.gd._on_round_started client 跳过 reset_and_regenerate;MM 加 broadcast_container_entries / _rpc_apply_container_entries;broadcast_round_start payload 含 containers map |
+| [test/unit/test_inspect_log.gd](test/unit/test_inspect_log.gd) | **Phase 2B Tier B3**:LocalInspectLog autoload(Dict[container_path][entry_uid]→bool);mark/is/clear/hydrate/is_container_fully_inspected API;search_ui 用 lil 替代 entry["inspected"] 字段(cache 策略 — lil 是 source of truth,entry 是 hydrate cache);GameSession.start_round 清空 lil |
+| [test/unit/test_container_opened_sync.gd](test/unit/test_container_opened_sync.gd) | **Phase 2B Tier B4**:container.gd 加 _apply_opened_local 私有方法(给 RPC 调,幂等);open() 多人调 mm.notify_container_opened;MM 加 notify_container_opened (host 直接广播 / client 通过 host 转发) + _rpc_request/apply_container_opened |
+| [test/unit/test_take_rpc.gd](test/unit/test_take_rpc.gd) | **Phase 2B Tier B5**:DragState 加 is_no_remove + begin_no_remove(多人 take 不删源);search_ui 加 _pending_take 字段 + _is_multiplayer/_is_single 助手;_try_drop / _quick_transfer / _on_item_double_clicked 多人 container→inventory 走 _initiate_multi_take(RPC);MM 加 take_granted/take_denied signals + _rpc_request_take/_rpc_take_granted/_rpc_take_denied;is_host 校验 + 找 entry by uid + broadcast_container_entries 后 reply granted |
+| [test/unit/test_round_end_rpc.gd](test/unit/test_round_end_rpc.gd) | **Phase 2B Tier B6**:extraction_zone 多人发 mm._rpc_request_extract;MM 加 _rpc_request_extract(host 校验 + 广播)/ _rpc_apply_round_end(本人撤离 → "extracted" 保留 inv;他人撤离 → "timeout" 清 inv)/ broadcast_round_end_timeout(host timeout RPC);GameSession.tick host timeout 走 broadcast_round_end_timeout |
+| [test/unit/test_home_multiplayer.gd](test/unit/test_home_multiplayer.gd) | **Phase 2B Tier B7**:home.gd 加 _ready_toggle / _mp_player_list / _enter_btn 字段;_on_enter 多人 host 调 mm.start_game(单人 change_scene main 旧路径);_on_ready_toggled 调 mm.set_local_ready;订阅 mm.peer_joined/peer_left/all_ready_changed/game_started;_setup_multiplayer_ui 在 _ready 调 |
+| [test/unit/test_restart_round_clean.gd](test/unit/test_restart_round_clean.gd) | **Phase 2B Tier B8**:start_round 重置 _extracted_this_round / _next_entry_uid / time_left / round_active;清 LocalInspectLog;emit round_started;完整 round 重开循环(start → end → start)状态干净;result_panel._on_restart 必须 paused = false 在 change_scene 之前 + clear_active 订单 |
 
-跑全量 = 147 测试 / 530 assert。
+跑全量 = 230 测试 / 709 assert。
 
 ## 已知小 bug(P2,先记录不修)
 

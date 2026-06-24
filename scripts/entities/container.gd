@@ -254,13 +254,30 @@ func open() -> void:
 	if opened:
 		return
 	opened = true
-	# 第一次被打开 → 永久标记 + 视觉变化("已搜刮")
-	# 注意:is_searched 不在这里设,由 search_ui 在完整 inspect 流程跑完后设。
-	# 否则第一次打开会被当成"已 inspect 过",跳过放大镜动画。
-	if not has_been_opened:
-		has_been_opened = true
-		_set_searched_visual()
 	get_node("/root/EventBus").container_opened.emit(self)
+	# Phase 2B Tier B4:has_been_opened 全局同步(已搜 badge 给所有 peer 显示)
+	# - 单人:本地标记
+	# - 多人:走 mm.notify_container_opened → host 广播 → 各 peer _apply_opened_local
+	# 注意:has_been_opened 用于"已搜刮"视觉,首次开过永久标。
+	# is_searched(完整 inspect 流程跑完) 在 search_ui per-peer 计算,不在这里设。
+	if not has_been_opened:
+		var mm = get_node_or_null("/root/MultiplayerManager")
+		if mm == null or (mm.has_method("is_single") and mm.is_single()):
+			_apply_opened_local()
+		else:
+			# 多人:host/client 都走 mm.notify_container_opened
+			# host 直接广播 _rpc_apply_container_opened
+			# client 发 _rpc_request_container_opened 给 host,host 再广播
+			if mm.has_method("notify_container_opened"):
+				mm.notify_container_opened(String(self.get_path()))
+
+# Phase 2B Tier B4:本地应用"已搜"badge(给 _rpc_apply_container_opened 调)
+# 单人也走这条(open() 直接调)。幂等:重复调安全。
+func _apply_opened_local() -> void:
+	if has_been_opened:
+		return
+	has_been_opened = true
+	_set_searched_visual()
 
 func close() -> void:
 	if not opened:

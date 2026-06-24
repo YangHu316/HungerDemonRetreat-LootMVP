@@ -40,6 +40,17 @@ func _get_inspect_time(item: ItemData) -> float:
 # 拖拽状态（§3 drag-out 模式）
 var _drag: DragState = null
 
+# Phase 2B Tier B5:多人 take 等 host 确认时的状态(_drag 已被释放,ghost 锁定显示)
+var _pending_take: Dictionary = {}  # 空 → 无 pending;非空 → 等 host reply
+
+# Phase 2B helpers
+func _is_single() -> bool:
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	return mm == null or (mm.has_method("is_single") and mm.is_single())
+
+func _is_multiplayer() -> bool:
+	return not _is_single()
+
 func _ready() -> void:
 	visible = false
 	_bus = get_node("/root/EventBus")
@@ -55,6 +66,13 @@ func _ready() -> void:
 	var mg = get_node_or_null("Root/ContainerPanel/Magnifier")
 	if mg != null:
 		mg.visible = false
+	# Phase 2B Tier B5:订阅 MM take 回调
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm != null:
+		if mm.has_signal("take_granted") and not mm.take_granted.is_connected(_on_take_granted):
+			mm.take_granted.connect(_on_take_granted)
+		if mm.has_signal("take_denied") and not mm.take_denied.is_connected(_on_take_denied):
+			mm.take_denied.connect(_on_take_denied)
 
 func bind_player(p: Node) -> void:
 	_player = p
@@ -189,6 +207,8 @@ func _on_item_double_clicked(entry: Dictionary, panel: GridPanel) -> void:
 		return
 	if _drag != null:
 		return
+	if not _pending_take.is_empty():
+		return  # 等 host 回复中,忽略新操作
 	var dst: GridPanel = inventory_panel if panel == container_panel else container_panel
 	var item: ItemData = entry["item"]
 	# 先预探测目标位置（不修改源）
@@ -198,7 +218,21 @@ func _on_item_double_clicked(entry: Dictionary, panel: GridPanel) -> void:
 		if v != null and is_instance_valid(v):
 			_flash_red(v)
 		return
-	# drag-out: 立即从源移除
+	# Phase 2B Tier B5:多人 container → inventory 走 RPC
+	if _is_multiplayer() and panel == container_panel and dst == inventory_panel:
+		# 用 no_remove 模拟一个临时 ds 来记录 source(给 _initiate_multi_take 用),
+		# 然后把 ghost/highlight 也建好
+		_drag = DragState.begin_no_remove(entry, panel)
+		_dim_source_view(entry, panel)
+		_drag.current_rotated = fit[2]
+		_create_ghost()
+		_create_highlight()
+		_initiate_multi_take(dst, fit[0], fit[1], fit[2])
+		return
+	if _is_multiplayer() and panel == inventory_panel and dst == container_panel:
+		_show_toast("暂不支持放回容器(Phase 2C 跟进)")
+		return
+	# 单人 / 多人 inventory↔inventory:旧路径
 	var ds := DragState.begin(entry, panel)
 	ds.current_rotated = fit[2]
 	if not ds.place_to(dst, fit[0], fit[1]):
@@ -230,10 +264,26 @@ func _on_sort_requested() -> void:
 	_inv.changed.emit()
 
 func _begin_drag(entry: Dictionary, panel: GridPanel) -> void:
-	# §3 drag-out: 立即从源面板移除（DragState.begin 内部调用 panel.remove_entry）
-	_drag = DragState.begin(entry, panel)
+	# Phase 2B Tier B5:多人 + 拖 container 物品 → no_remove(等 host 确认)
+	# 单人 OR 多人 inventory↔inventory(整理) → 旧路径(立即从源移除)
+	if _is_multiplayer() and panel == container_panel:
+		_drag = DragState.begin_no_remove(entry, panel)
+		_dim_source_view(entry, panel)
+	else:
+		_drag = DragState.begin(entry, panel)
 	_create_ghost()
 	_create_highlight()
+
+func _dim_source_view(entry: Dictionary, panel: GridPanel) -> void:
+	# 多人 take 时,源 view 半透明示意"占位中等 host"
+	var view = panel.get_view_for_entry(entry)
+	if view != null and is_instance_valid(view):
+		view.modulate = Color(0.5, 0.5, 0.5, 0.6)
+
+func _restore_source_view(entry: Dictionary, panel: GridPanel) -> void:
+	var view = panel.get_view_for_entry(entry)
+	if view != null and is_instance_valid(view):
+		view.modulate = Color(1, 1, 1, 1)
 
 func _create_ghost() -> void:
 	if _drag == null:
@@ -401,6 +451,16 @@ func _try_drop() -> void:
 		return
 	var from_id: String = _drag.from_grid_id
 	var to_id: String = p.grid_id
+	# Phase 2B Tier B5:多人 container → inventory 走 RPC(保守:等 host 回复)
+	if _is_multiplayer() and from_id == "container" and to_id == "inventory":
+		_initiate_multi_take(p, cx, cy, rot)
+		return
+	# 多人禁止 inventory → container(Phase 2C 再放回去)
+	if _is_multiplayer() and from_id == "inventory" and to_id == "container":
+		_cancel_drag()
+		_show_toast("暂不支持放回容器(Phase 2C 跟进)")
+		return
+	# 单人 / 多人 inventory↔inventory 整理:旧路径
 	if not _drag.place_to(p, cx, cy):
 		_finish_drag()
 		return
@@ -408,6 +468,130 @@ func _try_drop() -> void:
 	if from_id == "inventory" or to_id == "inventory":
 		_inv.changed.emit()
 	_finish_drag()
+
+# Phase 2B Tier B5:多人 take 入口
+# _drag 是 no_remove DragState;ghost 已显示,这里发 RPC 给 host
+func _initiate_multi_take(dest_panel: GridPanel, cx: int, cy: int, rot: bool) -> void:
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm == null or _container == null or _drag == null:
+		_cancel_drag()
+		return
+	var entry: Dictionary = _drag.entry
+	var uid: int = int(entry.get("uid", -1))
+	if uid < 0:
+		_cancel_drag()
+		return
+	var c_path: String = String(_container.get_path())
+	# 锁 ghost 显示"等待中"
+	_pending_take = {
+		"uid": uid,
+		"container_path": c_path,
+		"dest_grid_id": dest_panel.grid_id,
+		"dest_x": cx,
+		"dest_y": cy,
+		"rotated": rot,
+		"source_entry": entry,
+		"source_panel": _drag.from_panel,
+	}
+	if _drag.ghost != null and is_instance_valid(_drag.ghost):
+		_drag.ghost.modulate = Color(1, 1, 1, 0.35)
+	# 锁 highlight 颜色
+	if _drag.highlight != null and is_instance_valid(_drag.highlight):
+		_drag.highlight.color = Color(0.6, 0.6, 0.85, 0.35)
+	# Drag refers freed externally now;keep visuals
+	# 发 RPC(client → host;host 也通过 rpc_id(1) 自调)
+	mm._rpc_request_take.rpc_id(1, c_path, uid, dest_panel.grid_id, cx, cy, rot)
+	# 注意:_drag 视觉资源由 _on_take_granted/denied 清理。
+	# 把 _drag 引用搁到 _pending_take 里。
+	_pending_take["ghost"] = _drag.ghost
+	_pending_take["highlight"] = _drag.highlight
+	_drag.ghost = null  # 阻止 _finish_drag 清掉
+	_drag.highlight = null
+	_drag = null  # 释放 _drag(防止继续拖拽)
+
+func _on_take_granted(entry_wire: Dictionary, dest_grid_id: String, dest_x: int, dest_y: int, rotated: bool) -> void:
+	# host 同意 take:request 方收到,把 entry 加进自己背包(容器 entries 由 host broadcast 已同步更新)
+	if _pending_take.is_empty():
+		return
+	# 校验 uid 对应
+	if int(entry_wire.get("uid", -2)) != int(_pending_take.get("uid", -1)):
+		# 不是当前 pending,忽略
+		return
+	# Reconstruct entry on inventory side
+	var item_path: String = String(entry_wire.get("item_path", ""))
+	var item: ItemData = null
+	if item_path != "":
+		item = load(item_path) as ItemData
+	if item == null:
+		_clear_pending_take_visuals()
+		return
+	# 找目标 panel(应是 inventory_panel)
+	var dst: GridPanel = null
+	if dest_grid_id == "inventory":
+		dst = inventory_panel
+	if dst == null:
+		_clear_pending_take_visuals()
+		return
+	var entry := {
+		"uid": int(entry_wire.get("uid", -1)),
+		"item": item,
+		"x": dest_x,
+		"y": dest_y,
+		"rotated": rotated,
+		"freshness_elapsed": float(entry_wire.get("freshness_elapsed", 0.0)),
+		"inspected": true,  # 拿到手就已识别(背包物品默认揭示)
+		"examined": true,
+		"inspecting": false,
+	}
+	if not dst.add_entry_at(entry, dest_x, dest_y):
+		# 罕见:目标位置同时被自己其他动作占了。fallback first-fit
+		var fit = GridPlacer.find_first_fit(dst.grid, item)
+		if fit != null:
+			entry["rotated"] = fit[2]
+			dst.add_entry_at(entry, fit[0], fit[1])
+	_inv.changed.emit()
+	_clear_pending_take_visuals()
+
+func _on_take_denied(container_path: String, entry_uid: int, reason: String) -> void:
+	if _pending_take.is_empty():
+		return
+	if int(_pending_take.get("uid", -1)) != entry_uid:
+		return
+	# 恢复源 view 透明度(no_remove 模式下源没动,只是 dim 了)
+	var src_panel: GridPanel = _pending_take.get("source_panel", null)
+	var src_entry: Dictionary = _pending_take.get("source_entry", {})
+	if src_panel != null and is_instance_valid(src_panel) and not src_entry.is_empty():
+		_restore_source_view(src_entry, src_panel)
+	_clear_pending_take_visuals()
+	_show_toast("拿取失败:%s" % reason)
+
+func _clear_pending_take_visuals() -> void:
+	# 释放 ghost / highlight
+	var g = _pending_take.get("ghost", null)
+	if g != null and is_instance_valid(g):
+		g.queue_free()
+	var hl = _pending_take.get("highlight", null)
+	if hl != null and is_instance_valid(hl):
+		hl.queue_free()
+	# 恢复源 view modulate(granted 时源 entry 已被 host RPC 移除,view 也被 grid_panel 清掉)
+	var src_panel: GridPanel = _pending_take.get("source_panel", null)
+	var src_entry: Dictionary = _pending_take.get("source_entry", {})
+	if src_panel != null and is_instance_valid(src_panel) and not src_entry.is_empty():
+		_restore_source_view(src_entry, src_panel)
+	_pending_take = {}
+
+func _show_toast(msg: String) -> void:
+	# 简易 toast — 控制台 + 1.5s Label
+	push_warning("[take] " + msg)
+	if help_label != null:
+		var orig_text: String = help_label.text
+		help_label.text = msg
+		var tw := create_tween()
+		tw.tween_interval(1.5)
+		tw.tween_callback(func():
+			if help_label != null:
+				help_label.text = orig_text
+		)
 
 func _cancel_drag() -> void:
 	if _drag != null:
@@ -423,6 +607,8 @@ func _quick_transfer(entry: Dictionary, panel: GridPanel) -> void:
 	# 右键快速转移 → drag-out 流程
 	if _drag != null:
 		return
+	if not _pending_take.is_empty():
+		return
 	var dst: GridPanel = inventory_panel if panel == container_panel else container_panel
 	var item: ItemData = entry["item"]
 	var fit = GridPlacer.find_first_fit(dst.grid, item)
@@ -431,6 +617,19 @@ func _quick_transfer(entry: Dictionary, panel: GridPanel) -> void:
 		if v != null and is_instance_valid(v):
 			_flash_red(v)
 		return
+	# Phase 2B Tier B5:多人 container → inventory 走 RPC
+	if _is_multiplayer() and panel == container_panel and dst == inventory_panel:
+		_drag = DragState.begin_no_remove(entry, panel)
+		_dim_source_view(entry, panel)
+		_drag.current_rotated = fit[2]
+		_create_ghost()
+		_create_highlight()
+		_initiate_multi_take(dst, fit[0], fit[1], fit[2])
+		return
+	if _is_multiplayer() and panel == inventory_panel and dst == container_panel:
+		_show_toast("暂不支持放回容器(Phase 2C 跟进)")
+		return
+	# 单人 / 多人 inventory↔inventory:旧路径
 	var ds := DragState.begin(entry, panel)
 	ds.current_rotated = fit[2]
 	if not ds.place_to(dst, fit[0], fit[1]):
