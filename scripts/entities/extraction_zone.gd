@@ -76,18 +76,17 @@ func _process(delta: float) -> void:
 			bus.extracted.emit(inv.get_total_value())
 		# Phase 2B Tier B6:撤离触发分支
 		# 单人:本地标 _extracted + 直接 end_round("extracted")
-		# 多人:发 _rpc_request_extract 给 host,host 验证 + 广播 _rpc_apply_round_end
+		# 多人:走 mm.request_extract(host 自己直接调本地;client rpc_id(1, ...))
 		var mm = get_node_or_null("/root/MultiplayerManager")
 		if mm == null or (mm.has_method("is_single") and mm.is_single()):
 			gs.mark_extracted_this_round()
 			gs.end_round("extracted")
 		else:
-			# 多人:本地先标 _extracted_this_round(host 收到 RPC 时已知道是谁撤),
-			# 但更稳的:host 在 _rpc_request_extract 处理时为 sender 设标记。
-			# 这里只发请求,不本地 end_round(等 host 广播)。
+			# Q3 fix:host self-RPC 不工作(rpc_id(1) from peer 1 无 call_local)
+			# 用 mm.request_extract helper 自动按 is_host 分支
 			var my_id: int = mm.get_local_peer_id()
-			if mm.has_method("_rpc_request_extract"):
-				mm._rpc_request_extract.rpc_id(1, my_id)
+			if mm.has_method("request_extract"):
+				mm.request_extract(my_id)
 
 # §5 race fix：回合结束 → 中止倒计时 + 关掉 process + 关掉 area 监听
 func _on_round_ended(_total: int, _reason: String) -> void:

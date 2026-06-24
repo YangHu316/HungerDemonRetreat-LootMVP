@@ -25,6 +25,7 @@ var _enter_btn: Button = null              # 共用按钮(单人:进入战局;�
 var _ready_toggle: CheckBox = null         # 多人 ready 开关(单人时隐藏)
 var _mp_player_list: VBoxContainer = null  # 多人玩家列表(显示各人 ready 状态)
 var _mp_status_label: Label = null         # 多人状态提示(等 host / 全员 ready 等)
+var _mp_panel: PanelContainer = null       # Q4:浮动 panel,单人时整体隐藏
 
 func _ready() -> void:
 	_build_ui()
@@ -151,35 +152,60 @@ func _build_ui() -> void:
 	vbox.add_child(enter_btn)
 	_enter_btn = enter_btn
 
-	# Phase 2B Tier B7:多人 ready 流 UI(单人时全部隐藏)
-	# Ready toggle + 玩家列表 + 状态文字
-	var mp_box := HBoxContainer.new()
-	mp_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	mp_box.add_theme_constant_override("separation", 24)
-	vbox.add_child(mp_box)
+	# Phase 2B Tier B7 + Q4 fix:多人 ready 流 UI 用浮动 PanelContainer
+	# (anchored 屏幕右上,下方紧挨"主菜单"按钮)— 不挤占主 vbox,任何分辨率都看得见
+	var mp_panel := PanelContainer.new()
+	mp_panel.anchor_left = 1.0
+	mp_panel.anchor_right = 1.0
+	mp_panel.offset_left = -340
+	mp_panel.offset_right = -16
+	mp_panel.offset_top = 56
+	mp_panel.offset_bottom = 280
+	add_child(mp_panel)
+	# 白底带边框
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.12, 0.13, 0.16, 0.92)
+	sb.set_border_width_all(2)
+	sb.border_color = Color(0.95, 0.85, 0.4, 0.5)
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(12)
+	mp_panel.add_theme_stylebox_override("panel", sb)
+
+	var mp_vbox := VBoxContainer.new()
+	mp_vbox.add_theme_constant_override("separation", 10)
+	mp_panel.add_child(mp_vbox)
+
+	var mp_title := Label.new()
+	mp_title.text = "🌐 联机准备"
+	mp_title.add_theme_font_size_override("font_size", 16)
+	mp_title.modulate = Color(0.95, 0.85, 0.4)
+	mp_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mp_vbox.add_child(mp_title)
 
 	_ready_toggle = CheckBox.new()
 	_ready_toggle.text = "✓ 准备就绪"
 	_ready_toggle.add_theme_font_size_override("font_size", 18)
 	_ready_toggle.toggled.connect(_on_ready_toggled)
-	mp_box.add_child(_ready_toggle)
+	mp_vbox.add_child(_ready_toggle)
 
-	var list_box := VBoxContainer.new()
-	list_box.custom_minimum_size = Vector2(280, 0)
-	mp_box.add_child(list_box)
 	var list_title := Label.new()
 	list_title.text = "玩家列表"
-	list_title.add_theme_font_size_override("font_size", 14)
+	list_title.add_theme_font_size_override("font_size", 13)
 	list_title.modulate = Color(0.7, 0.85, 1.0)
-	list_box.add_child(list_title)
+	mp_vbox.add_child(list_title)
+
 	_mp_player_list = VBoxContainer.new()
-	list_box.add_child(_mp_player_list)
+	mp_vbox.add_child(_mp_player_list)
 
 	_mp_status_label = Label.new()
-	_mp_status_label.add_theme_font_size_override("font_size", 14)
+	_mp_status_label.add_theme_font_size_override("font_size", 13)
 	_mp_status_label.modulate = Color(0.85, 0.85, 0.5)
 	_mp_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(_mp_status_label)
+	_mp_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mp_vbox.add_child(_mp_status_label)
+	# 单人模式下整个 mp_panel 隐藏(_setup_multiplayer_ui 处理)
+	mp_panel.visible = false  # 默认隐藏,_setup_multiplayer_ui 多人时打开
+	_mp_panel = mp_panel
 
 	# DragLayer 在最上面,放 ghost 和 highlight
 	_drag_layer = Control.new()
@@ -494,15 +520,13 @@ func _refresh_orders() -> void:
 func _setup_multiplayer_ui() -> void:
 	var mm = get_node_or_null("/root/MultiplayerManager")
 	if mm == null or (mm.has_method("is_single") and mm.is_single()):
-		# 单人:隐藏 ready toggle / 玩家列表 / 状态文字。enter_btn 保持原样。
-		if _ready_toggle != null:
-			_ready_toggle.visible = false
-		if _mp_player_list != null:
-			_mp_player_list.get_parent().visible = false
-		if _mp_status_label != null:
-			_mp_status_label.visible = false
+		# 单人:整个 mp_panel 隐藏
+		if _mp_panel != null:
+			_mp_panel.visible = false
 		return
-	# 多人:订阅 mm 信号 + 初始化 UI
+	# 多人:显示 mp_panel + 订阅 mm 信号 + 初始化 UI
+	if _mp_panel != null:
+		_mp_panel.visible = true
 	if mm.has_signal("peer_joined") and not mm.peer_joined.is_connected(_mp_on_peer_changed):
 		mm.peer_joined.connect(_mp_on_peer_changed)
 	if mm.has_signal("peer_left") and not mm.peer_left.is_connected(_mp_on_peer_left):

@@ -3,6 +3,10 @@ extends Node3D
 # 容器类型（保留，兼容旧逻辑）
 enum CType { DRAWER, CABINET, SAFE }
 
+# Phase 2B Q1 fix:apply_entries(host RPC 同步)后 emit,让 search_ui 监听并刷新 UI
+# 否则 B 端 search_ui 打开时是 snapshot,A 拿走东西后 B 看不见变化
+signal entries_synced
+
 @export var type: CType = CType.DRAWER
 @export var data: Resource  # ContainerData（可选，为空时用 type enum）
 
@@ -211,6 +215,8 @@ func apply_entries(wire_entries: Array) -> void:
 			"inspecting": false,
 		}
 		contents.place(entry, int(w.get("x", 0)), int(w.get("y", 0)))
+	# Phase 2B Q1 fix:emit 让 search_ui 知道实时更新(其他 peer 拿物品/放回都会触发)
+	entries_synced.emit()
 
 func reset_and_regenerate() -> void:
 	# 清空内容、重置状态、重新填充

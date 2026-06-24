@@ -36,8 +36,9 @@ func test_extraction_zone_branches_on_mode() -> void:
 	# countdown_succeeded 后必须按 mm 分支
 	assert_true(src.contains("is_single"),
 		"extraction_zone 必须按 mm.is_single 分支")
-	assert_true(src.contains("_rpc_request_extract"),
-		"extraction_zone 多人分支必须发 mm._rpc_request_extract")
+	# Q3 fix:helper request_extract 取代直接 _rpc_request_extract.rpc_id(host self-RPC bug)
+	assert_true(src.contains("request_extract"),
+		"extraction_zone 多人分支必须调 mm.request_extract(host 直接调本地,client rpc_id)")
 	assert_true(src.contains("mark_extracted_this_round"),
 		"extraction_zone 单人分支必须调 gs.mark_extracted_this_round")
 

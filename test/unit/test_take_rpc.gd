@@ -107,8 +107,9 @@ func test_search_ui_initiate_multi_take_uses_rpc() -> void:
 	if j < 0:
 		j = src.length()
 	var body: String = src.substr(i, j - i)
-	assert_true(body.contains("_rpc_request_take"),
-		"_initiate_multi_take 必须调 mm._rpc_request_take.rpc_id(1, ...)")
+	# Q3 fix:用 mm.request_take helper(host self-RPC bug 修复)替代直接 .rpc_id
+	assert_true(body.contains("request_take"),
+		"_initiate_multi_take 必须调 mm.request_take(host 直接调本地;client rpc_id)")
 	assert_true(body.contains("_pending_take"),
 		"_initiate_multi_take 必须把状态记到 _pending_take")
 

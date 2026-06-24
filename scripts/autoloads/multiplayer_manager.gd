@@ -21,6 +21,9 @@ signal game_started
 # Phase 2B Tier B5:take-item RPC 回调 → search_ui 监听
 signal take_granted(entry_wire: Dictionary, dest_grid_id: String, dest_x: int, dest_y: int, rotated: bool)
 signal take_denied(container_path: String, entry_uid: int, reason: String)
+# Phase 2B Q2:put-back(背包→容器)对称 RPC
+signal put_granted(item_path: String, source_inv_x: int, source_inv_y: int)
+signal put_denied(item_path: String, reason: String)
 
 var mode: int = Mode.SINGLE
 var peer: ENetMultiplayerPeer = null
@@ -213,6 +216,36 @@ func notify_container_opened(container_path: String) -> void:
 		# client 发请求给 host
 		_rpc_request_container_opened.rpc_id(1, container_path)
 
+# Phase 2B Tier B5 / B6 fix:host self-RPC 不会触发(rpc_id(1) from peer 1 无 call_local).
+# 用 helper 让 host 直接调本地函数。
+func request_take(container_path: String, entry_uid: int,
+		dest_grid_id: String, dest_x: int, dest_y: int, rotated: bool) -> void:
+	if is_single():
+		return
+	if is_host():
+		# host 自己拿物品:直接调本地处理(sender_id=0 → 视为 1)
+		_rpc_request_take(container_path, entry_uid, dest_grid_id, dest_x, dest_y, rotated)
+	else:
+		_rpc_request_take.rpc_id(1, container_path, entry_uid, dest_grid_id, dest_x, dest_y, rotated)
+
+func request_extract(peer_id: int) -> void:
+	if is_single():
+		return
+	if is_host():
+		_rpc_request_extract(peer_id)
+	else:
+		_rpc_request_extract.rpc_id(1, peer_id)
+
+# Phase 2B Q2 fix:背包→容器放回(对称 take RPC)
+func request_put(container_path: String, item_path: String, freshness: float,
+		dest_x: int, dest_y: int, rotated: bool, source_inv_x: int, source_inv_y: int) -> void:
+	if is_single():
+		return
+	if is_host():
+		_rpc_request_put(container_path, item_path, freshness, dest_x, dest_y, rotated, source_inv_x, source_inv_y)
+	else:
+		_rpc_request_put.rpc_id(1, container_path, item_path, freshness, dest_x, dest_y, rotated, source_inv_x, source_inv_y)
+
 # Client → Host 请求"我开了 path 这个容器"
 @rpc("any_peer", "reliable")
 func _rpc_request_container_opened(container_path: String) -> void:
@@ -297,6 +330,65 @@ func _rpc_take_granted(entry_wire: Dictionary, dest_grid_id: String,
 @rpc("authority", "reliable")
 func _rpc_take_denied(container_path: String, entry_uid: int, reason: String) -> void:
 	take_denied.emit(container_path, entry_uid, reason)
+
+# ──────────────────────────────────────────────────────────────
+# Phase 2B Q2:Put-back RPC(背包 → 容器)
+#   Client 想放回物品 → _rpc_request_put 给 host
+#   Host 校验:容器存在 + can_place
+#   通过:host 在容器中创建 entry(分配新 uid),broadcast entries 更新,reply granted 给请求方
+#   失败:reply denied
+# ──────────────────────────────────────────────────────────────
+
+@rpc("any_peer", "reliable")
+func _rpc_request_put(container_path: String, item_path: String, freshness: float,
+		dest_x: int, dest_y: int, rotated: bool, source_inv_x: int, source_inv_y: int) -> void:
+	if not is_host():
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if sender_id == 0:
+		sender_id = 1
+	var c = get_tree().root.get_node_or_null(NodePath(container_path))
+	if c == null or c.contents == null:
+		_rpc_put_denied.rpc_id(sender_id, item_path, "容器不存在")
+		return
+	var item: ItemData = load(item_path) as ItemData
+	if item == null:
+		_rpc_put_denied.rpc_id(sender_id, item_path, "物品资源缺失")
+		return
+	if not c.contents.can_place(item, dest_x, dest_y, rotated, null):
+		_rpc_put_denied.rpc_id(sender_id, item_path, "目标位置不可放")
+		return
+	# Host 创建 entry(新 uid)
+	var gs = get_node_or_null("/root/GameSession")
+	var new_uid: int = -1
+	if gs != null and gs.has_method("next_entry_uid"):
+		new_uid = gs.next_entry_uid()
+	var entry: Dictionary = {
+		"uid": new_uid,
+		"item": item,
+		"x": dest_x,
+		"y": dest_y,
+		"rotated": rotated,
+		"freshness_elapsed": freshness,
+		"examined": false,  # 容器内 entry 是否 inspected 由 per-peer log 管(放回去,所有 peer 都重新 inspect)
+		"inspected": false,
+		"inspecting": false,
+	}
+	if not c.contents.place(entry, dest_x, dest_y):
+		_rpc_put_denied.rpc_id(sender_id, item_path, "place 失败")
+		return
+	# 广播 container entries 更新
+	broadcast_container_entries(container_path, c.serialize_entries())
+	# Reply granted(请求方从背包移除)
+	_rpc_put_granted.rpc_id(sender_id, item_path, source_inv_x, source_inv_y)
+
+@rpc("authority", "reliable")
+func _rpc_put_granted(item_path: String, source_inv_x: int, source_inv_y: int) -> void:
+	put_granted.emit(item_path, source_inv_x, source_inv_y)
+
+@rpc("authority", "reliable")
+func _rpc_put_denied(item_path: String, reason: String) -> void:
+	put_denied.emit(item_path, reason)
 
 # ──────────────────────────────────────────────────────────────
 # Phase 2B Tier B6:Round end host-authoritative
