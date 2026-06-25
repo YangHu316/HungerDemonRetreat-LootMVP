@@ -54,11 +54,56 @@ var _invincible_until: float = 0.0  # Time.get_ticks_msec/1000.0 时刻;> 当前
 var _sound_ring: MeshInstance3D = null
 var _sound_ring_mat: StandardMaterial3D = null
 
+# 外卖侠 §06 玩家躲避系统:钻躲点状态
+# 躲藏中:movement_locked=true / 不 emit 声音 / 怪物视野返 false
+var is_hidden: bool = false
+var _current_hiding_spot: Node = null
+var _nearby_hiding_spot: Node = null  # 独立 tracking,不混进 _candidates(F vs E 键路径分离)
+
 func is_invincible() -> bool:
 	return Time.get_ticks_msec() / 1000.0 < _invincible_until
 
 func grant_invincibility(seconds: float) -> void:
 	_invincible_until = Time.get_ticks_msec() / 1000.0 + seconds
+
+# §06 给 monster._can_see_player 调用(用 method 不是字段,兼容 fake player)
+func is_hidden_now() -> bool:
+	return is_hidden
+
+# §06 进入躲点(由 _input "hide" 分支调)
+func hide_in(spot: Node) -> void:
+	if is_hidden:
+		return
+	if spot == null or not is_instance_valid(spot):
+		return
+	if not spot.has_method("can_hide") or not spot.can_hide():
+		return
+	if spot.has_method("add_occupant"):
+		spot.add_occupant(self)
+	_current_hiding_spot = spot
+	is_hidden = true
+	movement_locked = true
+	velocity = Vector3.ZERO
+	_current_speed_v = Vector3.ZERO
+
+# §06 出躲点
+func unhide() -> void:
+	if not is_hidden:
+		return
+	if _current_hiding_spot != null and is_instance_valid(_current_hiding_spot):
+		if _current_hiding_spot.has_method("remove_occupant"):
+			_current_hiding_spot.remove_occupant(self)
+	_current_hiding_spot = null
+	is_hidden = false
+	movement_locked = false
+
+# §06 邻接躲点 tracking(由 HidingSpot.body_entered/exited 调)
+func set_nearby_hiding_spot(spot: Node) -> void:
+	_nearby_hiding_spot = spot
+
+func clear_nearby_hiding_spot(spot: Node) -> void:
+	if _nearby_hiding_spot == spot:
+		_nearby_hiding_spot = null
 
 # v8 §4.3 interactables
 var _candidates: Array = []
@@ -196,6 +241,15 @@ func _input(event: InputEvent) -> void:
 	# 单人模式(没设 multiplayer peer)直接跑;避免 is_multiplayer_authority 内部
 	# 调 get_unique_id 在无 peer 时 push error 刷屏。
 	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
+		return
+	# §06 hide 分支:必须在 movement_locked 检查前(否则躲了出不来 — 躲藏中 movement_locked=true)
+	if event.is_action_pressed("hide"):
+		if is_hidden:
+			unhide()
+		elif _nearby_hiding_spot != null and is_instance_valid(_nearby_hiding_spot) \
+				and _nearby_hiding_spot.has_method("can_hide") and _nearby_hiding_spot.can_hide():
+			hide_in(_nearby_hiding_spot)
+		get_viewport().set_input_as_handled()
 		return
 	if movement_locked:
 		return
@@ -628,6 +682,10 @@ func _run_anim_test_sync() -> void:
 
 # 外卖侠 §五:移动时按 stance 周期 emit 声音事件给 monster 订阅
 func _tick_sound_emit(delta: float) -> void:
+	# §06 躲藏中声半径 ≈ 0,直接 skip emit
+	if is_hidden:
+		_sound_emit_timer = 0.0
+		return
 	# 静止/无敌期间不 emit
 	var speed_sq: float = velocity.x * velocity.x + velocity.z * velocity.z
 	if speed_sq < 0.01:

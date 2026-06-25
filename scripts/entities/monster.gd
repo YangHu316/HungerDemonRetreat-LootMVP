@@ -38,6 +38,8 @@ const CHASE_LOSE_TIME: float = 10.0
 const CHASE_SPEED_MUL: float = 1.2
 # §五 RETURNING:SEARCH 失败后走回 spawn,到家后才 IDLE
 const RETURN_REACH_DIST: float = 0.6
+# §06 玩家躲避系统:监测玩家 hidden 时视野返 false;SEARCH 态极近(1.5m)躲点 roll detect_prob 一次
+const SPOT_DETECT_DIST: float = 1.5
 
 enum State { IDLE, INVESTIGATE, SEARCH, CHASE, RETURNING, COOLDOWN }
 
@@ -49,6 +51,8 @@ var _search_timer: float = 0.0
 var _search_change_timer: float = 0.0
 var _search_wander_pos: Vector3 = Vector3.ZERO
 var _chase_lose_timer: float = 0.0
+# §06 SEARCH 态躲点检测:同一 spot 同一次 SEARCH 只 roll 一次。状态切出 SEARCH 时清空
+var _rolled_spots: Dictionary = {}  # instance_id → bool
 var _bus: Node = null
 var _gs: Node = null
 var _rng: RandomNumberGenerator = null
@@ -120,6 +124,9 @@ func _physics_process(delta: float) -> void:
 	if _gs == null or not _gs.round_active:
 		velocity = Vector3.ZERO
 		return
+	# §06:状态切出 SEARCH 时清空 _rolled_spots(下次进 SEARCH 重新 roll)
+	if state != State.SEARCH and not _rolled_spots.is_empty():
+		_rolled_spots.clear()
 	# §五 Plan A 视野:仅在已警觉状态(INVESTIGATE/SEARCH/CHASE/RETURNING)生效
 	# IDLE 是聋瞎 — 玩家声圈外绝对安全(核心契约)
 	# COOLDOWN 期间不响应任何事件
@@ -176,8 +183,12 @@ func _tick_chase(delta: float) -> void:
 
 # 视野判定:dist ≤ SEE_RADIUS + 90° 前向锥 + raycast 没墙挡
 # §五 Plan A:玩家可绕到背后躲过视野(锥外不算看见)
+# §06:玩家在躲点中(is_hidden_now)直接返 false
 func _can_see_player(player: Node3D) -> bool:
 	if player == null or not is_instance_valid(player):
+		return false
+	# §06 躲点遮断视野
+	if player.has_method("is_hidden_now") and player.is_hidden_now():
 		return false
 	var to_player: Vector3 = player.global_position - global_position
 	to_player.y = 0.0
@@ -260,6 +271,40 @@ func _tick_search(delta: float) -> void:
 		_search_change_timer = 0.0
 	# 朝当前游荡点走(spec 05§2.1 SEARCH 移动 ×1.1)
 	_move_toward(_search_wander_pos, MOVE_SPEED * SEARCH_SPEED_MUL, delta)
+	# §06 极近躲点 detect roll(同一 spot 同一次 SEARCH 只 roll 一次)
+	_check_hiding_spot_detect()
+
+# §06 SEARCH 态极近躲点 detect:遍历 hiding_spots group,在 SPOT_DETECT_DIST 内、
+# 且有 occupants、且本次 SEARCH 还没 roll 过 → roll detect_prob
+# 命中:第一个 occupant 被 unhide + _catch
+func _check_hiding_spot_detect() -> void:
+	for spot in get_tree().get_nodes_in_group("hiding_spots"):
+		if not is_instance_valid(spot):
+			continue
+		var s3 := spot as Node3D
+		if s3 == null:
+			continue
+		if global_position.distance_to(s3.global_position) > SPOT_DETECT_DIST:
+			continue
+		var occs: Array = []
+		if spot.has_method("get_occupants"):
+			occs = spot.get_occupants()
+		if occs.is_empty():
+			continue
+		var key: int = spot.get_instance_id()
+		if _rolled_spots.get(key, false):
+			continue
+		_rolled_spots[key] = true
+		var prob: float = 0.0
+		if "detection_prob" in spot:
+			prob = float(spot.detection_prob)
+		if _rng.randf() < prob:
+			var first_occ = occs[0]
+			if first_occ != null and is_instance_valid(first_occ):
+				if first_occ.has_method("unhide"):
+					first_occ.unhide()
+				_catch(first_occ)
+			return
 
 # §五 Plan A RETURNING:SEARCH 失败 → 直线走回 spawn 点
 # 路上仍可被新声音(_on_sound_emitted)/ 视野(_physics_process gate)重新触发 INVESTIGATE/CHASE

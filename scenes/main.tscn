@@ -11,6 +11,7 @@
 [ext_resource type="PackedScene" path="res://scenes/extraction_progress_ui.tscn" id="10"]
 [ext_resource type="PackedScene" path="res://scenes/entities/player.tscn" id="12_player"]
 [ext_resource type="PackedScene" path="res://scenes/entities/door_assembly.tscn" id="13_door"]
+[ext_resource type="PackedScene" path="res://scenes/entities/hiding_spot.tscn" id="14_hide"]
 [ext_resource type="Material" path="res://materials/floor_main_hall.tres" id="20"]
 [ext_resource type="Material" path="res://materials/floor_bedroom.tres" id="21"]
 [ext_resource type="Material" path="res://materials/floor_storage.tres" id="22"]
@@ -194,6 +195,32 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -1)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, -1)
 
 [node name="Decor" type="Node3D" parent="World" unique_id=577336472]
+
+[node name="HidingSpots" type="Node3D" parent="World"]
+
+[node name="HS_BedroomBed" parent="World/HidingSpots" instance=ExtResource("14_hide")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 0, -7)
+capacity = 1
+detection_prob = 0.20
+spot_label = "床底"
+
+[node name="HS_StorageCabinet" parent="World/HidingSpots" instance=ExtResource("14_hide")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, -8.5)
+capacity = 1
+detection_prob = 0.10
+spot_label = "储物柜"
+
+[node name="HS_StorageCardPile" parent="World/HidingSpots" instance=ExtResource("14_hide")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.8, 0, -7.0)
+capacity = 2
+detection_prob = 0.20
+spot_label = "纸箱堆"
+
+[node name="HS_MainHallTable" parent="World/HidingSpots" instance=ExtResource("14_hide")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 4)
+capacity = 1
+detection_prob = 0.35
+spot_label = "桌底"
 
 [node name="PlayerSpawn" type="Marker3D" parent="World" unique_id=1973754304]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 1, 7.8)

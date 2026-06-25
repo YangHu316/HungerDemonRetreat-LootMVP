@@ -1,0 +1,35 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/entities/hiding_spot.gd" id="1_hs"]
+
+[sub_resource type="BoxMesh" id="hs_box"]
+size = Vector3(0.8, 1.4, 0.6)
+
+[sub_resource type="StandardMaterial3D" id="hs_mat"]
+albedo_color = Color(0.45, 0.45, 0.55, 1)
+roughness = 0.7
+emission_enabled = true
+emission = Color(0.20, 0.30, 0.50, 1)
+emission_energy_multiplier = 0.3
+
+[sub_resource type="SphereShape3D" id="hs_area"]
+radius = 1.5
+
+[node name="HidingSpot" type="Node3D"]
+script = ExtResource("1_hs")
+
+[node name="Visual" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+mesh = SubResource("hs_box")
+material_override = SubResource("hs_mat")
+
+[node name="InteractArea" type="Area3D" parent="."]
+collision_layer = 0
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractArea"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("hs_area")
+
+[node name="Anchor" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)

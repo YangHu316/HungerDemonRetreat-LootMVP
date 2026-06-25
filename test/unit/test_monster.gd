@@ -379,6 +379,158 @@ func test_main_resets_monster_on_round_started() -> void:
 	assert_true(body.contains("monster") and body.contains("reset_to_spawn"),
 		"_on_round_started 必须 reset monster 到 spawn 点(下一局重置)")
 
+# ── §06 玩家躲避系统:怪物视野 + 极近躲点检测 ──
+
+class FakeHiddenPlayer extends Node3D:
+	var _hidden: bool = true
+	var _inv_until: float = 0.0
+	func is_invincible() -> bool:
+		return Time.get_ticks_msec() / 1000.0 < _inv_until
+	func grant_invincibility(s: float) -> void:
+		_inv_until = Time.get_ticks_msec() / 1000.0 + s
+	func is_hidden_now() -> bool:
+		return _hidden
+	func unhide() -> void:
+		_hidden = false
+
+func test_monster_vision_blocked_when_player_hidden() -> void:
+	# §06 关键契约:玩家在躲点中 → _can_see_player 必须返 false
+	var m := _spawn_monster_at(Vector3.ZERO)
+	m.rotation.y = 0.0  # 朝 -Z
+	var fake := FakeHiddenPlayer.new()
+	add_child_autofree(fake)
+	fake.global_position = Vector3(0.0, 0.0, -2.0)  # 锥内 + 距离内
+	# 默认 _hidden=true
+	assert_false(m._can_see_player(fake),
+		"玩家 is_hidden_now=true 时 _can_see_player 必须返 false")
+	# 出来后应能看见
+	fake.unhide()
+	assert_true(m._can_see_player(fake),
+		"玩家 unhide 后应能看见(锥内距离内)")
+
+func test_monster_can_see_method_uses_is_hidden_now() -> void:
+	# 源码层:_can_see_player 必须用 is_hidden_now method 而不是直接读字段
+	var src: String = load("res://scripts/entities/monster.gd").source_code
+	var i: int = src.find("func _can_see_player")
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0: j = src.length()
+	var body: String = src.substr(i, j - i)
+	assert_true(body.contains("is_hidden_now"),
+		"_can_see_player 必须查 is_hidden_now() (兼容 fake player + 解耦)")
+
+func test_monster_search_calls_hiding_spot_detect() -> void:
+	# 源码层:_tick_search 必须调 _check_hiding_spot_detect
+	var src: String = load("res://scripts/entities/monster.gd").source_code
+	var i: int = src.find("func _tick_search")
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0: j = src.length()
+	var body: String = src.substr(i, j - i)
+	assert_true(body.contains("_check_hiding_spot_detect"),
+		"_tick_search 必须调 _check_hiding_spot_detect")
+	assert_true(src.contains("func _check_hiding_spot_detect"),
+		"Monster 必须有 _check_hiding_spot_detect 函数")
+	assert_true(src.contains("SPOT_DETECT_DIST"),
+		"Monster 必须有 SPOT_DETECT_DIST 常量(spec 1.5m 极近)")
+
+func test_monster_rolled_spots_clears_outside_search() -> void:
+	# 源码层:状态切出 SEARCH 时 _rolled_spots 必须清空
+	var src: String = load("res://scripts/entities/monster.gd").source_code
+	var i: int = src.find("func _physics_process")
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0: j = src.length()
+	var body: String = src.substr(i, j - i)
+	assert_true(body.contains("_rolled_spots") and body.contains("clear"),
+		"_physics_process 必须在状态切出 SEARCH 时清空 _rolled_spots(下次进 SEARCH 重新 roll)")
+
+func test_monster_detect_skips_empty_spot() -> void:
+	# 没有 occupant 的躲点 → 不 roll
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	var hs := Node3D.new()
+	hs.set_script(load("res://scripts/entities/hiding_spot.gd"))
+	hs.add_to_group("hiding_spots")
+	add_child_autofree(hs)
+	hs.global_position = Vector3(0.5, 0.0, 0.0)  # 极近
+	hs.detection_prob = 1.0  # 100% 但没人 → 不 roll
+	m._check_hiding_spot_detect()
+	assert_eq(m._rolled_spots.size(), 0,
+		"空 spot 不应进入 _rolled_spots")
+	assert_ne(m.state, m.State.COOLDOWN,
+		"空 spot 不应触发 catch")
+
+func test_monster_detect_at_zero_prob_never_catches() -> void:
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	_gs.time_left = 600.0
+	var hs := Node3D.new()
+	hs.set_script(load("res://scripts/entities/hiding_spot.gd"))
+	hs.add_to_group("hiding_spots")
+	add_child_autofree(hs)
+	hs.global_position = Vector3(0.5, 0.0, 0.0)
+	hs.detection_prob = 0.0  # 永远不命中
+	var fake := FakeHiddenPlayer.new()
+	add_child_autofree(fake)
+	hs.add_occupant(fake)
+	m._check_hiding_spot_detect()
+	assert_eq(m._rolled_spots.size(), 1, "已 roll 过(只 roll 一次)")
+	assert_almost_eq(_gs.time_left, 600.0, 0.01, "0% 概率必不 catch")
+	assert_ne(m.state, m.State.COOLDOWN, "0% 概率必不 COOLDOWN")
+	assert_true(fake.is_hidden_now(), "0% 概率玩家仍躲着")
+
+func test_monster_detect_at_full_prob_catches() -> void:
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	_gs.time_left = 600.0
+	var hs := Node3D.new()
+	hs.set_script(load("res://scripts/entities/hiding_spot.gd"))
+	hs.add_to_group("hiding_spots")
+	add_child_autofree(hs)
+	hs.global_position = Vector3(0.5, 0.0, 0.0)
+	hs.detection_prob = 1.0  # 必命中
+	var fake := FakeHiddenPlayer.new()
+	add_child_autofree(fake)
+	hs.add_occupant(fake)
+	m._check_hiding_spot_detect()
+	assert_almost_eq(_gs.time_left, 420.0, 0.5,
+		"100% 概率必 catch(扣 180s)")
+	assert_eq(m.state, m.State.COOLDOWN, "catch 后 COOLDOWN")
+	assert_false(fake.is_hidden_now(), "catch 后玩家被 unhide")
+
+func test_monster_detect_only_rolls_once_per_spot() -> void:
+	# 同一 spot 同一次 SEARCH 只 roll 一次(_rolled_spots 标记)
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	var hs := Node3D.new()
+	hs.set_script(load("res://scripts/entities/hiding_spot.gd"))
+	hs.add_to_group("hiding_spots")
+	add_child_autofree(hs)
+	hs.global_position = Vector3(0.5, 0.0, 0.0)
+	hs.detection_prob = 0.0
+	var fake := FakeHiddenPlayer.new()
+	add_child_autofree(fake)
+	hs.add_occupant(fake)
+	# 第一次 roll
+	m._check_hiding_spot_detect()
+	assert_eq(m._rolled_spots.size(), 1, "第 1 次后 _rolled_spots 有 1 项")
+	# 第二次:不应再 roll(已标记)
+	m._check_hiding_spot_detect()
+	assert_eq(m._rolled_spots.size(), 1, "第 2 次仍 1 项(同 spot 不重复 roll)")
+
+func test_monster_detect_skips_spot_outside_dist() -> void:
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	var hs := Node3D.new()
+	hs.set_script(load("res://scripts/entities/hiding_spot.gd"))
+	hs.add_to_group("hiding_spots")
+	add_child_autofree(hs)
+	hs.global_position = Vector3(5.0, 0.0, 0.0)  # 5m > SPOT_DETECT_DIST 1.5m
+	hs.detection_prob = 1.0  # 100% 但距离外 → 不 roll
+	var fake := FakeHiddenPlayer.new()
+	add_child_autofree(fake)
+	hs.add_occupant(fake)
+	m._check_hiding_spot_detect()
+	assert_eq(m._rolled_spots.size(), 0, "距离 > SPOT_DETECT_DIST 不 roll")
+
 # ── 辅助 ──
 
 func _spawn_monster_at(pos: Vector3) -> CharacterBody3D:
