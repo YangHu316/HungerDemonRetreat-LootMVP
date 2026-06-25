@@ -666,6 +666,24 @@ func test_monster_check_stuck_skipped_with_no_velocity() -> void:
 	assert_eq(m._stuck_timer, 0.0,
 		"velocity=0 时 _stuck_timer 应清零(没想动不算卡)")
 
+func test_monster_check_stuck_called_after_tick_in_physics() -> void:
+	# 关键回归测:_check_stuck 必须在 match state(tick 设 velocity)之后 / move_and_slide 之前
+	# 否则 velocity 已被 move_and_slide 撞门归零,_check_stuck 看到 0 误判"没想动"→ stuck 永远不触发
+	var src: String = load("res://scripts/entities/monster.gd").source_code
+	var i: int = src.find("func _physics_process")
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0: j = src.length()
+	var body: String = src.substr(i, j - i)
+	var match_idx: int = body.find("match state:")
+	var stuck_idx: int = body.find("_check_stuck")
+	var slide_idx: int = body.find("move_and_slide()")
+	assert_true(match_idx > 0 and stuck_idx > 0 and slide_idx > 0,
+		"_physics_process 必须含 match state / _check_stuck / move_and_slide()")
+	assert_lt(match_idx, stuck_idx,
+		"_check_stuck 必须在 match state 之后(否则看到的 velocity 是上帧归零后的)")
+	assert_lt(stuck_idx, slide_idx,
+		"_check_stuck 必须在 move_and_slide 之前(否则看到的 velocity 已被归零)")
+
 func test_monster_detect_skips_spot_outside_dist() -> void:
 	var m := _spawn_monster_at(Vector3.ZERO)
 	_gs.start_round()

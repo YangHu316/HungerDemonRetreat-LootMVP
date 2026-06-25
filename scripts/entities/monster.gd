@@ -160,17 +160,6 @@ func _physics_process(delta: float) -> void:
 				# 用最后看见的玩家位置作 search 中心
 				if p != null and is_instance_valid(p):
 					sound_target = p.global_position
-		# §07 stuck 检测:撞门 / 撞墙 / navmesh 路径无法物理通过 → 卡 STUCK_TIMEOUT 秒后放弃回家
-		# 仅 RETURNING 不查(回家本来就要走,卡了再切 RETURNING 等于循环)
-		if state != State.RETURNING:
-			_check_stuck(delta)
-		else:
-			_stuck_timer = 0.0
-			_stuck_last_pos = global_position
-	else:
-		# 非警觉态,清 stuck 计时
-		_stuck_timer = 0.0
-		_stuck_last_pos = global_position
 	match state:
 		State.IDLE:
 			velocity = Vector3.ZERO
@@ -187,6 +176,14 @@ func _physics_process(delta: float) -> void:
 			velocity = Vector3.ZERO
 			if _cooldown_timer <= 0.0:
 				state = State.IDLE
+	# §07 stuck 检测必须在 tick 之后 / move_and_slide 之前 —
+	# 否则 velocity 已被 move_and_slide 撞门归零,_check_stuck 会误判"没想动"
+	# (典型场景:关门挡住怪物 → tick 设 velocity 朝门 → move_and_slide 归零 → 下一帧看 velocity=0 不计 stuck)
+	if alerted and state != State.RETURNING:
+		_check_stuck(delta)
+	else:
+		_stuck_timer = 0.0
+		_stuck_last_pos = global_position
 	move_and_slide()
 
 # §五 CHASE:实时追玩家当前位置(看见才进此态)
