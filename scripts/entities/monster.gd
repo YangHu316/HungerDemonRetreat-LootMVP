@@ -31,13 +31,17 @@ const SEARCH_SPEED_MUL: float = 1.1  # spec T2 base
 # spec 05§2.2:视距 ~8-10m / 锥角 90°。取中值 9m
 const SEE_RADIUS: float = 9.0
 const VISION_HALF_ANGLE_DEG: float = 45.0  # 90° 前向锥 → 半角 45°
-# spec 05§2.1:放弃倒计时 ~10s(无新线索)
-const CHASE_LOSE_TIME: float = 10.0
+# §五 CHASE 失视线 → SEARCH:1.5s 缓冲(snappy)。spec 的 ~10s 是 SEARCH 内部 give-up,与失视线非同一概念
+const CHASE_LOSE_TIME: float = 1.5
 const CHASE_SPEED_MUL: float = 1.2
 # §五 RETURNING:SEARCH 失败后走回 spawn,到家后才 IDLE
 const RETURN_REACH_DIST: float = 0.6
 # §06 玩家躲避系统:监测玩家 hidden 时视野返 false;SEARCH 态极近(1.5m)躲点 roll detect_prob 一次
 const SPOT_DETECT_DIST: float = 1.5
+# §07 寻路 stuck 兜底:警觉态(非 RETURNING)有速度但实际没动 N 秒 → 放弃当前目标回 spawn
+# 防"navmesh 路径过门道但物理被关门挡死"造成的"门口死等"
+const STUCK_TIMEOUT: float = 3.0
+const STUCK_MOVE_THRESHOLD: float = 0.05
 
 enum State { IDLE, INVESTIGATE, SEARCH, CHASE, RETURNING, COOLDOWN }
 
@@ -49,6 +53,9 @@ var _search_timer: float = 0.0
 var _search_change_timer: float = 0.0
 var _search_wander_pos: Vector3 = Vector3.ZERO
 var _chase_lose_timer: float = 0.0
+# §07 stuck 检测:警觉态有速度但实际没动则累加,到 STUCK_TIMEOUT 切 RETURNING
+var _stuck_timer: float = 0.0
+var _stuck_last_pos: Vector3 = Vector3.ZERO
 # §06 SEARCH 态躲点检测:同一 spot 同一次 SEARCH 只 roll 一次。状态切出 SEARCH 时清空
 var _rolled_spots: Dictionary = {}  # instance_id → bool
 var _bus: Node = null
@@ -153,6 +160,17 @@ func _physics_process(delta: float) -> void:
 				# 用最后看见的玩家位置作 search 中心
 				if p != null and is_instance_valid(p):
 					sound_target = p.global_position
+		# §07 stuck 检测:撞门 / 撞墙 / navmesh 路径无法物理通过 → 卡 STUCK_TIMEOUT 秒后放弃回家
+		# 仅 RETURNING 不查(回家本来就要走,卡了再切 RETURNING 等于循环)
+		if state != State.RETURNING:
+			_check_stuck(delta)
+		else:
+			_stuck_timer = 0.0
+			_stuck_last_pos = global_position
+	else:
+		# 非警觉态,清 stuck 计时
+		_stuck_timer = 0.0
+		_stuck_last_pos = global_position
 	match state:
 		State.IDLE:
 			velocity = Vector3.ZERO
@@ -387,6 +405,27 @@ func _apply_velocity_with_rotation(dir: Vector3, speed: float, delta: float) -> 
 	velocity.z = dir.z * speed
 	velocity.y = 0.0
 
+# §07 stuck 兜底:警觉态(非 RETURNING)有速度但实际位移 < STUCK_MOVE_THRESHOLD 时计时,
+# 累计到 STUCK_TIMEOUT 秒切 RETURNING(典型场景:撞关门 / navmesh 路径过不去)
+func _check_stuck(delta: float) -> void:
+	var has_velocity: bool = velocity.length_squared() > 0.01
+	if not has_velocity:
+		_stuck_timer = 0.0
+		_stuck_last_pos = global_position
+		return
+	var moved: float = global_position.distance_to(_stuck_last_pos)
+	if moved < STUCK_MOVE_THRESHOLD:
+		_stuck_timer += delta
+		if _stuck_timer >= STUCK_TIMEOUT:
+			# 卡死 → 放弃当前目标回家
+			state = State.RETURNING
+			_stuck_timer = 0.0
+			_chase_lose_timer = 0.0
+			_search_timer = 0.0
+	else:
+		_stuck_timer = 0.0
+		_stuck_last_pos = global_position
+
 func _on_sound_emitted(pos: Vector3, radius: float) -> void:
 	if _gs == null or not _gs.round_active:
 		return
@@ -444,5 +483,7 @@ func reset_to_spawn() -> void:
 	_search_timer = 0.0
 	_search_change_timer = 0.0
 	_chase_lose_timer = 0.0
+	_stuck_timer = 0.0
+	_stuck_last_pos = spawn_pos
 	sound_target = Vector3.ZERO
 	_search_wander_pos = Vector3.ZERO

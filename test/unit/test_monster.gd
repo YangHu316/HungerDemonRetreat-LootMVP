@@ -598,6 +598,74 @@ func test_monster_move_toward_fallback_when_no_navmesh() -> void:
 	assert_lt(m.velocity.x, 0.0,
 		"没 navmesh 时 fallback 直走 — velocity 朝 spawn(-X)")
 
+# ── §07 stuck 兜底 + CHASE_LOSE_TIME 修复 ──
+
+func test_monster_chase_lose_time_is_short() -> void:
+	# 失视线 → SEARCH 应是 snappy(1-2s),不能用 spec 10s(那是 SEARCH 内 give-up)
+	var src: String = load("res://scripts/entities/monster.gd").source_code
+	var i: int = src.find("CHASE_LOSE_TIME: float =")
+	assert_true(i > 0, "必须有 CHASE_LOSE_TIME 常量")
+	var line_end: int = src.find("\n", i)
+	var line: String = src.substr(i, line_end - i)
+	assert_false(line.contains("10.0"),
+		"CHASE_LOSE_TIME 不能是 10s(那是 SEARCH 内 give-up,会造成'门口死等'体验)")
+
+func test_monster_has_stuck_detection() -> void:
+	var src: String = load("res://scripts/entities/monster.gd").source_code
+	assert_true(src.contains("STUCK_TIMEOUT"),
+		"Monster 必须有 STUCK_TIMEOUT 常量(撞门兜底)")
+	assert_true(src.contains("_stuck_timer"),
+		"Monster 必须有 _stuck_timer 字段")
+	assert_true(src.contains("func _check_stuck"),
+		"Monster 必须有 _check_stuck 函数")
+	var i: int = src.find("func _check_stuck")
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0: j = src.length()
+	var body: String = src.substr(i, j - i)
+	assert_true(body.contains("State.RETURNING"),
+		"_check_stuck 卡死时必须切 RETURNING")
+
+func test_monster_check_stuck_triggers_return_after_timeout() -> void:
+	# 行为测:有速度 + 实际不动 N 秒 → 切 RETURNING
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	m.state = m.State.CHASE
+	m.global_position = Vector3.ZERO
+	m._stuck_last_pos = Vector3.ZERO
+	m._stuck_timer = 0.0
+	m.velocity = Vector3(2.0, 0.0, 0.0)
+	# 模拟卡 STUCK_TIMEOUT + 0.1s,每帧 reset 位置(撞死)
+	var elapsed: float = 0.0
+	while elapsed < m.STUCK_TIMEOUT + 0.1:
+		m._check_stuck(0.016)
+		m.global_position = Vector3.ZERO
+		m.velocity = Vector3(2.0, 0.0, 0.0)
+		elapsed += 0.016
+	assert_eq(m.state, m.State.RETURNING,
+		"卡住超 STUCK_TIMEOUT 应切 RETURNING(撞门兜底)")
+
+func test_monster_check_stuck_resets_when_moving() -> void:
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	m.state = m.State.CHASE
+	m._stuck_last_pos = Vector3.ZERO
+	m._stuck_timer = 1.0
+	m.velocity = Vector3(2.0, 0.0, 0.0)
+	m.global_position = Vector3(0.5, 0.0, 0.0)
+	m._check_stuck(0.016)
+	assert_lt(m._stuck_timer, 1.0,
+		"实际有位移时 _stuck_timer 应被重置")
+
+func test_monster_check_stuck_skipped_with_no_velocity() -> void:
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	m.state = m.State.IDLE
+	m.velocity = Vector3.ZERO
+	m._stuck_timer = 0.5
+	m._check_stuck(0.016)
+	assert_eq(m._stuck_timer, 0.0,
+		"velocity=0 时 _stuck_timer 应清零(没想动不算卡)")
+
 func test_monster_detect_skips_spot_outside_dist() -> void:
 	var m := _spawn_monster_at(Vector3.ZERO)
 	_gs.start_round()
