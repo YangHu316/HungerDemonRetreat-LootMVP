@@ -274,7 +274,7 @@ func test_monster_new_sound_during_search_resumes_investigate() -> void:
 	m.state = m.State.SEARCH
 	m._search_timer = 3.0  # 已搜了 3s
 	m.sound_target = Vector3.ZERO
-	m._on_sound_emitted(Vector3(2.0, 0.0, 0.0), 4.0)
+	m._on_sound_emitted(Vector3(2.0, 0.0, 0.0), 12.0)  # spec run radius 100%
 	assert_eq(m.state, m.State.INVESTIGATE,
 		"SEARCH 中新声音 → 切 INVESTIGATE")
 	assert_eq(m._search_timer, 0.0,
@@ -291,8 +291,8 @@ func test_monster_idle_to_investigate_on_close_loud_sound() -> void:
 	# 创建一个 monster + 模拟声音事件,验证状态切到 INVESTIGATE
 	var m := _spawn_monster_at(Vector3.ZERO)
 	_gs.start_round()
-	# 距离 3m,radius 4m(run 1/3 缩放后)→ 100% 必听到
-	m._on_sound_emitted(Vector3(3.0, 0.0, 0.0), 4.0)
+	# 距离 3m,radius 12m(spec run)→ prob = 12/12 = 100% 必听到
+	m._on_sound_emitted(Vector3(3.0, 0.0, 0.0), 12.0)
 	assert_eq(m.state, m.State.INVESTIGATE,
 		"听到声音后应切 INVESTIGATE")
 	assert_almost_eq(m.sound_target.x, 3.0, 0.01,
@@ -301,8 +301,8 @@ func test_monster_idle_to_investigate_on_close_loud_sound() -> void:
 func test_monster_ignores_sound_outside_radius() -> void:
 	var m := _spawn_monster_at(Vector3.ZERO)
 	_gs.start_round()
-	# 距离 10m,radius 4m → 距离超过半径,直接忽略
-	m._on_sound_emitted(Vector3(10.0, 0.0, 0.0), 4.0)
+	# 距离 13m,radius 12m → 距离超过半径,直接忽略(spec 最大 run 12m)
+	m._on_sound_emitted(Vector3(13.0, 0.0, 0.0), 12.0)
 	assert_eq(m.state, m.State.IDLE,
 		"距离超 radius 必须不响应")
 
@@ -310,14 +310,14 @@ func test_monster_ignores_sound_during_cooldown() -> void:
 	var m := _spawn_monster_at(Vector3.ZERO)
 	_gs.start_round()
 	m.state = m.State.COOLDOWN
-	m._on_sound_emitted(Vector3(1.0, 0.0, 0.0), 4.0)
+	m._on_sound_emitted(Vector3(1.0, 0.0, 0.0), 12.0)
 	assert_eq(m.state, m.State.COOLDOWN,
 		"COOLDOWN 期间必须忽略声音")
 
 func test_monster_ignores_sound_round_inactive() -> void:
 	var m := _spawn_monster_at(Vector3.ZERO)
 	_gs.round_active = false
-	m._on_sound_emitted(Vector3(1.0, 0.0, 0.0), 4.0)
+	m._on_sound_emitted(Vector3(1.0, 0.0, 0.0), 12.0)
 	assert_eq(m.state, m.State.IDLE,
 		"round 不活跃必须不响应")
 
@@ -325,7 +325,7 @@ func test_monster_target_is_sound_origin_not_player() -> void:
 	# §五 关键设计:追声源点,玩家移动后怪物仍走原点
 	var m := _spawn_monster_at(Vector3.ZERO)
 	_gs.start_round()
-	m._on_sound_emitted(Vector3(3.0, 0.0, 0.0), 4.0)
+	m._on_sound_emitted(Vector3(3.0, 0.0, 0.0), 12.0)
 	assert_almost_eq(m.sound_target.x, 3.0, 0.01,
 		"sound_target 应锁定为发声时刻的 pos(玩家移动后不更新)")
 

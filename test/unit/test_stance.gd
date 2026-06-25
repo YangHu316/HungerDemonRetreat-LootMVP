@@ -20,15 +20,15 @@ func test_walk_speed_matches_existing() -> void:
 func test_run_speed_matches_existing() -> void:
 	assert_eq(Stance.RUN_SPEED, 7.5)
 
-# ---- 声音半径常量(文档 §四,2026-06 缩放为 1/3 适配房子尺寸) ----
+# ---- 声音半径常量(spec 05_饿魔感知与寻人逻辑.md §1.2) ----
 func test_sneak_sound_radius_1_5m() -> void:
-	assert_eq(Stance.SNEAK_SOUND_RADIUS, 0.5, "潜行 ~0.5m 近乎无声")
+	assert_eq(Stance.SNEAK_SOUND_RADIUS, 1.5, "潜行 1.5m 近乎无声 (spec)")
 
 func test_walk_sound_radius_5m() -> void:
-	assert_eq(Stance.WALK_SOUND_RADIUS, 1.67, "走路 ~1.67m 低噪")
+	assert_eq(Stance.WALK_SOUND_RADIUS, 5.0, "走路 5m 低噪 (spec)")
 
 func test_run_sound_radius_12m() -> void:
-	assert_eq(Stance.RUN_SOUND_RADIUS, 4.0, "奔跑 ~4m 高噪")
+	assert_eq(Stance.RUN_SOUND_RADIUS, 12.0, "奔跑 12m 高噪 (spec)")
 
 # ---- speed() 派发 ----
 func test_speed_dispatch() -> void:
@@ -38,9 +38,9 @@ func test_speed_dispatch() -> void:
 
 # ---- sound_radius() 派发 ----
 func test_sound_radius_dispatch() -> void:
-	assert_eq(Stance.sound_radius(Stance.Mode.SNEAK), 0.5)
-	assert_eq(Stance.sound_radius(Stance.Mode.WALK), 1.67)
-	assert_eq(Stance.sound_radius(Stance.Mode.RUN), 4.0)
+	assert_eq(Stance.sound_radius(Stance.Mode.SNEAK), 1.5)
+	assert_eq(Stance.sound_radius(Stance.Mode.WALK), 5.0)
+	assert_eq(Stance.sound_radius(Stance.Mode.RUN), 12.0)
 
 # ---- resolve() 决策 ----
 func test_resolve_no_input_is_walk() -> void:

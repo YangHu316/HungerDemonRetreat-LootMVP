@@ -14,23 +14,27 @@ class_name Monster
 # 移动(用户选 B):朝目标走,前向 raycast 检测墙体 → 墙挡住时侧偏
 # Catch(用户选 A.A):≤ 0.8m → gs.apply_time_penalty(180);怪物回 spawn,player 2s 无敌
 
-const MAX_HEAR_RADIUS: float = 4.0  # = run sound radius(归一化基准,1/3 缩放后)
+const MAX_HEAR_RADIUS: float = 12.0  # = run sound radius(spec 05§1.2:run 12m)
 const MOVE_SPEED: float = 2.5
 const CATCH_RADIUS: float = 0.8
-const CATCH_TIME_PENALTY: float = 180.0  # 3 分钟
+const CATCH_TIME_PENALTY: float = 180.0  # 3 分钟(MVP 占位,spec 是转盘小游戏)
 const COOLDOWN_TIME: float = 5.0
 const REACH_TARGET_DIST: float = 0.5     # 到声源算"到达"
 const WALL_RAYCAST_LEN: float = 1.0      # 前方探墙距离
 const SIDE_OFFSET_DEG: float = 35.0      # 撞墙时左右偏角
 # §五 SEARCH:到声源后游荡找人,超时回家
-const SEARCH_DURATION: float = 4.0
+# spec 05§2.1:搜寻 12-15s,移动 ×1.1。取中值 13s
+const SEARCH_DURATION: float = 13.0
 const SEARCH_WANDER_RADIUS: float = 2.0
 const SEARCH_CHANGE_INTERVAL: float = 1.5
+const SEARCH_SPEED_MUL: float = 1.1  # spec T2 base
 # §五 Plan A 视野:仅在已警觉状态(INVESTIGATE/SEARCH/CHASE/RETURNING)生效
 # IDLE 是聋瞎 — 玩家声圈外绝对安全(契约)
-const SEE_RADIUS: float = 4.0
+# spec 05§2.2:视距 ~8-10m / 锥角 90°。取中值 9m
+const SEE_RADIUS: float = 9.0
 const VISION_HALF_ANGLE_DEG: float = 45.0  # 90° 前向锥 → 半角 45°
-const CHASE_LOSE_TIME: float = 1.5  # 失去视线后追多久才回 SEARCH
+# spec 05§2.1:放弃倒计时 ~10s(无新线索)
+const CHASE_LOSE_TIME: float = 10.0
 const CHASE_SPEED_MUL: float = 1.2
 # §五 RETURNING:SEARCH 失败后走回 spawn,到家后才 IDLE
 const RETURN_REACH_DIST: float = 0.6
@@ -254,8 +258,8 @@ func _tick_search(delta: float) -> void:
 		var r: float = _rng.randf_range(0.5, SEARCH_WANDER_RADIUS)
 		_search_wander_pos = sound_target + Vector3(cos(ang) * r, 0.0, sin(ang) * r)
 		_search_change_timer = 0.0
-	# 朝当前游荡点走(慢速)
-	_move_toward(_search_wander_pos, MOVE_SPEED * 0.7, delta)
+	# 朝当前游荡点走(spec 05§2.1 SEARCH 移动 ×1.1)
+	_move_toward(_search_wander_pos, MOVE_SPEED * SEARCH_SPEED_MUL, delta)
 
 # §五 Plan A RETURNING:SEARCH 失败 → 直线走回 spawn 点
 # 路上仍可被新声音(_on_sound_emitted)/ 视野(_physics_process gate)重新触发 INVESTIGATE/CHASE
