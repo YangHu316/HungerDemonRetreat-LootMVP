@@ -45,6 +45,21 @@ var nearby_container: Node = null
 var current_stance: int = Stance.Mode.WALK
 var current_sound_radius: float = Stance.WALK_SOUND_RADIUS
 
+# 外卖侠 §五:声音 emit 节流 + 怪物 catch 后 2s 无敌
+const SOUND_EMIT_INTERVAL: float = 0.4  # 移动时每 0.4s emit 一次
+const POST_CATCH_INVINCIBLE: float = 2.0
+var _sound_emit_timer: float = 0.0
+var _invincible_until: float = 0.0  # Time.get_ticks_msec/1000.0 时刻;> 当前 = 无敌
+# 可视化:声音传播圈(green sneak / yellow walk / red run,半径=current_sound_radius)
+var _sound_ring: MeshInstance3D = null
+var _sound_ring_mat: StandardMaterial3D = null
+
+func is_invincible() -> bool:
+	return Time.get_ticks_msec() / 1000.0 < _invincible_until
+
+func grant_invincibility(seconds: float) -> void:
+	_invincible_until = Time.get_ticks_msec() / 1000.0 + seconds
+
 # v8 §4.3 interactables
 var _candidates: Array = []
 var _nearest: Node = null
@@ -113,6 +128,9 @@ func _ready() -> void:
 			ez.countdown_aborted.connect(_on_extraction_aborted)
 		if ez.has_signal("countdown_succeeded") and not ez.countdown_succeeded.is_connected(_on_extraction_succeeded):
 			ez.countdown_succeeded.connect(_on_extraction_succeeded)
+
+	# 外卖侠 §五:声音传播范围圈(可视化判定半径,颜色按 stance)
+	_build_sound_ring()
 
 	# v11 §3：anim_test_mode 仅在调试时启用（提交时为 false）；运行时即把
 	# arm_l/leg_l 设到测试姿势，并把 transform 比对结果存到 test_* 字段供 assert 读
@@ -227,6 +245,8 @@ func _physics_process(delta: float) -> void:
 
 	current_stance = Stance.resolve(wants_sneak, raw_wants_run, is_running)
 	current_sound_radius = Stance.sound_radius(current_stance)
+	# §五 可视化:声音圈半径/颜色随 stance 实时更新
+	_update_sound_ring()
 	var target_speed: float = Stance.speed(current_stance)
 	var target_v: Vector3 = direction * target_speed
 	var rate: float = ACCEL if direction != Vector3.ZERO else DECEL
@@ -248,6 +268,8 @@ func _physics_process(delta: float) -> void:
 
 	_update_state(delta, direction, is_running)
 	_update_nearest_interactable()
+	# 外卖侠 §五:移动时按 stance 周期 emit 声音事件给怪物订阅(单人才生效;多人 Phase 2C)
+	_tick_sound_emit(delta)
 
 func _update_state(delta: float, direction: Vector3, is_running: bool) -> void:
 	var moving: bool = direction != Vector3.ZERO
@@ -603,3 +625,72 @@ func _run_anim_test_sync() -> void:
 		f.close()
 	# quit 让 godot_run_project 提早结束
 	get_tree().quit()
+
+# 外卖侠 §五:移动时按 stance 周期 emit 声音事件给 monster 订阅
+func _tick_sound_emit(delta: float) -> void:
+	# 静止/无敌期间不 emit
+	var speed_sq: float = velocity.x * velocity.x + velocity.z * velocity.z
+	if speed_sq < 0.01:
+		_sound_emit_timer = 0.0
+		return
+	if is_invincible():
+		return
+	# 多人模式跳过(各 peer 本地 emit 会重复触发 monster — Phase 2C 再做 host 权威)
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm != null and mm.has_method("is_single") and not mm.is_single():
+		return
+	_sound_emit_timer += delta
+	if _sound_emit_timer < SOUND_EMIT_INTERVAL:
+		return
+	_sound_emit_timer = 0.0
+	var bus = get_node_or_null("/root/EventBus")
+	if bus != null and bus.has_signal("sound_emitted"):
+		bus.sound_emitted.emit(global_position, current_sound_radius)
+
+# 外卖侠 §五:声音传播范围圈(可视化怪物判定的距离 gate)
+# 颜色:绿(sneak 1.5m)/ 黄(walk 5m)/ 红(run 12m)
+func _build_sound_ring() -> void:
+	_sound_ring = MeshInstance3D.new()
+	_sound_ring.name = "SoundRing"
+	var tm := TorusMesh.new()
+	tm.inner_radius = current_sound_radius - 0.06
+	tm.outer_radius = current_sound_radius + 0.06
+	tm.ring_segments = 4
+	tm.rings = 64
+	_sound_ring.mesh = tm
+	# TorusMesh 默认环平面 = XZ(平躺),不需旋转
+	_sound_ring.position.y = 0.04
+	_sound_ring_mat = StandardMaterial3D.new()
+	_sound_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_sound_ring_mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	_sound_ring_mat.albedo_color = Color(1.0, 0.9, 0.3, 0.55)
+	_sound_ring_mat.emission_enabled = true
+	_sound_ring_mat.emission = Color(1.0, 0.9, 0.3)
+	_sound_ring_mat.emission_energy_multiplier = 0.6
+	_sound_ring_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_sound_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_sound_ring.material_override = _sound_ring_mat
+	add_child(_sound_ring)
+
+func _update_sound_ring() -> void:
+	if _sound_ring == null:
+		return
+	var tm: TorusMesh = _sound_ring.mesh as TorusMesh
+	if tm == null:
+		return
+	var r: float = max(current_sound_radius, 0.1)
+	tm.inner_radius = max(0.05, r - 0.06)
+	tm.outer_radius = r + 0.06
+	if _sound_ring_mat == null:
+		return
+	# 颜色随 stance:sneak 绿 / walk 黄 / run 红
+	var col: Color
+	match current_stance:
+		Stance.Mode.SNEAK:
+			col = Color(0.30, 1.00, 0.40, 0.55)
+		Stance.Mode.RUN:
+			col = Color(1.00, 0.30, 0.30, 0.55)
+		_:
+			col = Color(1.00, 0.90, 0.30, 0.55)
+	_sound_ring_mat.albedo_color = col
+	_sound_ring_mat.emission = Color(col.r, col.g, col.b)

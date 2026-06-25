@@ -233,6 +233,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
 mesh = SubResource("shadow_mesh")
 material_override = SubResource("shadow_mat")
 cast_shadow = 0
+visible = false
 
 [node name="BodyRoot" type="Node3D" parent="."]
 

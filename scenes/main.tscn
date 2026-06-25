@@ -29,11 +29,9 @@ background_mode = 2
 sky = SubResource("sky_res")
 ambient_light_source = 3
 ambient_light_color = Color(0.65, 0.72, 0.82, 1)
-ambient_light_energy = 0.18
+ambient_light_energy = 0.45
 tonemap_mode = 3
-ssao_enabled = true
-ssao_radius = 1.5
-ssao_intensity = 1.2
+ssao_enabled = false
 glow_intensity = 0.6
 
 [sub_resource type="StandardMaterial3D" id="floor_base_mat"]

@@ -8,6 +8,10 @@ extends Node3D
 # ============================================================
 
 const PlayerScene := preload("res://scenes/entities/player.tscn")
+const MonsterScript := preload("res://scripts/entities/monster.gd")
+
+# 外卖侠 §五:单人模式怪物 spawn 位置(客厅中央)。多人 Phase 2C 再做 host 权威
+const MONSTER_SINGLE_SPAWN: Vector3 = Vector3(-5.5, 0.0, 4.0)
 
 @onready var camera_rig: Node3D = $CameraRig
 @onready var search_ui: CanvasLayer = $SearchUI
@@ -37,6 +41,7 @@ func _ready() -> void:
 	_ensure_decor_collisions()
 
 	_spawn_players()
+	_spawn_monster_if_single()
 
 	var gs = get_node("/root/GameSession")
 	if not gs.round_started.is_connected(_on_round_started):
@@ -130,6 +135,16 @@ func _is_multiplayer() -> bool:
 	var mm = get_node_or_null("/root/MultiplayerManager")
 	return mm != null and not mm.is_single()
 
+# 外卖侠 §五:单人模式 spawn 一个怪物(多人留给 Phase 2C)
+func _spawn_monster_if_single() -> void:
+	if _is_multiplayer():
+		return
+	var m := CharacterBody3D.new()
+	m.set_script(MonsterScript)
+	m.name = "Monster"
+	m.position = MONSTER_SINGLE_SPAWN  # 先设 local position(进树前不能用 global)
+	add_child(m)
+
 func _on_round_started() -> void:
 	# 本地玩家位置 reset(Phase 2A 简化:每个 peer 本地 reset,不走 RPC)
 	if local_player != null and spawn_marker != null:
@@ -153,6 +168,10 @@ func _on_round_started() -> void:
 				d.is_open = false
 			if "_busy" in d:
 				d._busy = false
+	# 外卖侠 §五:重置怪物到 spawn 点(给重开下一局)
+	for m in get_tree().get_nodes_in_group("monster"):
+		if m.has_method("reset_to_spawn"):
+			m.reset_to_spawn()
 
 func _unhandled_input(event: InputEvent) -> void:
 	var gs = get_node("/root/GameSession")
@@ -909,48 +928,13 @@ func _build_storage(decor: Node) -> void:
 		plank.material_override = _make_mat(Color(0.18, 0.20, 0.24), 0.4)
 		plank.transform.origin = Vector3(0, 0.40 + i * 0.55, 0)
 		shelf.add_child(plank)
-	for i in range(3):
-		var box := MeshInstance3D.new()
-		box.name = "Box%d" % (i + 1)
-		var bxm := BoxMesh.new(); bxm.size = Vector3(0.55, 0.45, 0.4); box.mesh = bxm
-		box.material_override = _make_mat(Color(0.62, 0.45, 0.28), 0.95)
-		box.transform.origin = Vector3(-0.55 + i * 0.55, 0.65 + (i % 2) * 0.55, 0)
-		shelf.add_child(box)
+	# (删除:Shelf 内 3 棕色箱子 — 与 Shelf 框架穿模闪烁,且被实心 frame 遮挡看不见)
 
-	# §6 报纸堆（5 层薄 BoxMesh 错位旋转）
-	for i in range(5):
-		var paper := MeshInstance3D.new()
-		paper.name = "Newspaper%d" % (i + 1)
-		var pm := BoxMesh.new(); pm.size = Vector3(0.32, 0.012, 0.24); paper.mesh = pm
-		paper.material_override = _make_mat(Color(0.92, 0.90, 0.85) if i % 2 == 0 else Color(0.85, 0.82, 0.75), 0.8)
-		paper.transform.origin = Vector3(4.5, 0.012 + i * 0.013, -8.5)
-		paper.rotation.y = deg_to_rad((i - 2) * 7.0)
-		st.add_child(paper)
+	# (删除:报纸堆 — 用户要求)
 
-	# §6 充电器（黑 box + 绿 LED）
-	var charger := Node3D.new()
-	charger.name = "Charger"
-	charger.transform.origin = Vector3(3.0, 0, -3.5)
-	st.add_child(charger)
-	var ch_body := MeshInstance3D.new()
-	ch_body.name = "Body"
-	var chm := BoxMesh.new(); chm.size = Vector3(0.18, 0.06, 0.12); ch_body.mesh = chm
-	ch_body.material_override = _make_mat(Color(0.10, 0.10, 0.12), 0.5)
-	ch_body.transform.origin = Vector3(0, 0.03, 0)
-	charger.add_child(ch_body)
-	var led := MeshInstance3D.new()
-	led.name = "LED"
-	var lm := SphereMesh.new(); lm.radius = 0.012; lm.height = 0.024
-	led.mesh = lm
-	var led_mat := _make_mat(Color(0.20, 0.95, 0.30), 0.2)
-	led_mat.emission_enabled = true
-	led_mat.emission = Color(0.30, 1.0, 0.35)
-	led_mat.emission_energy_multiplier = 1.5
-	led.material_override = led_mat
-	led.transform.origin = Vector3(0.05, 0.062, 0.05)
-	charger.add_child(led)
+	# (删除:Charger — 用户:谁家充电器放地上)
 
-	# 老纸箱堆（保留 v10 现场感）
+	# 老纸箱堆（保留 v10 现场感)— 防止与 Shelf(z=-8.5±0.2) 穿模,挪到 Shelf 前面
 	for i in range(3):
 		var cb := MeshInstance3D.new()
 		cb.name = "CardPile%d" % (i + 1)
@@ -958,7 +942,8 @@ func _build_storage(decor: Node) -> void:
 		cbm.size = Vector3([0.6, 0.7, 0.5][i], [0.5, 0.4, 0.6][i], [0.5, 0.6, 0.4][i])
 		cb.mesh = cbm
 		cb.material_override = _make_mat(Color(0.62, 0.45, 0.28), 0.95)
-		cb.transform.origin = Vector3(1.5 + i * 0.4, [0.25, 0.20, 0.30][i], -7.8 - i * 0.4)
+		# z 从 -7.0 起,向 -7.8 方向(全部在 Shelf z=-8.3 之前,无穿模)
+		cb.transform.origin = Vector3(1.5 + i * 0.4, [0.25, 0.20, 0.30][i], -7.0 - i * 0.4)
 		cb.rotation.y = deg_to_rad(i * 25.0)
 		st.add_child(cb)
 

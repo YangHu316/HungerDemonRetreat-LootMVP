@@ -12,11 +12,11 @@ const SNEAK_SPEED: float = 1.5
 const WALK_SPEED: float = 4.5
 const RUN_SPEED: float = 7.5
 
-# 声音半径(米) — 文档 §四 / §五 表 7
-# 潜行 ~1.5m 近乎无声,走路 ~5m 低噪,奔跑 ~12m 高噪
-const SNEAK_SOUND_RADIUS: float = 1.5
-const WALK_SOUND_RADIUS: float = 5.0
-const RUN_SOUND_RADIUS: float = 12.0
+# 声音半径(米) — 文档 §四 / §五 表 7,2026-06 调小为 1/3 适配房子尺寸
+# 潜行 ~0.5m 近乎无声,走路 ~1.67m 低噪,奔跑 ~4m 高噪
+const SNEAK_SOUND_RADIUS: float = 0.5
+const WALK_SOUND_RADIUS: float = 1.67
+const RUN_SOUND_RADIUS: float = 4.0
 
 # 输入 + 体力状态 → 决定档位
 static func resolve(wants_sneak: bool, wants_run: bool, can_run: bool) -> int:

@@ -304,6 +304,8 @@ func _set_searched_visual() -> void:
 	looted_label.visible = true
 
 # §6.2 容器装饰：drawer 抽屉缝+把手；cabinet 门缝+把手；safe 密码盘+门缝
+# 防 z-fight:所有装饰 z 推到 size.z*0.5 + 0.020,后面留 5-10mm 空(消除共面)
+# 注:render_priority 在 Godot 4 不透明材质上无效,只能靠几何 clearance
 func _apply_decor(t: String, size: Vector3, base_col: Color) -> void:
 	# 清除旧装饰节点（可能由前一次 _apply_visual 创建）
 	var prev = get_node_or_null("Decor")
@@ -315,36 +317,40 @@ func _apply_decor(t: String, size: Vector3, base_col: Color) -> void:
 	var dark := base_col * Color(0.55, 0.55, 0.55, 1.0)
 	dark.a = 1.0
 	var metal := Color("#c0c0c0")
+	# 防 z-fight:装饰前推距离
+	var seam_z: float = size.z * 0.5 + 0.020   # seam 厚 0.02 → 后面 z = front + 0.010
+	var handle_z: float = size.z * 0.5 + 0.060  # handle 球后端 z = front + 0.010
+	var dial_z: float = size.z * 0.5 + 0.030    # dial 后端 z = front + 0.010
+	var rivet_z: float = size.z * 0.5 + 0.030   # rivet 球后端 z = front + 0.005
 	match t:
 		"drawer":
 			# 一条横向抽屉缝（在正面 +z 略外）+ 一个圆形把手
 			var seam := _make_box_mesh(Vector3(size.x * 0.85, 0.02, 0.02), dark)
-			seam.position = Vector3(0, size.y * 0.5, size.z * 0.5 + 0.01)
+			seam.position = Vector3(0, size.y * 0.5, seam_z)
 			decor.add_child(seam)
 			var handle := _make_sphere_mesh(0.05, metal)
-			handle.position = Vector3(0, size.y * 0.5, size.z * 0.5 + 0.05)
+			handle.position = Vector3(0, size.y * 0.5, handle_z)
 			decor.add_child(handle)
 		"cabinet":
 			# 中央竖直门缝 + 左右两个把手
 			var seam := _make_box_mesh(Vector3(0.02, size.y * 0.85, 0.02), dark)
-			seam.position = Vector3(0, size.y * 0.5, size.z * 0.5 + 0.01)
+			seam.position = Vector3(0, size.y * 0.5, seam_z)
 			decor.add_child(seam)
 			var handle_l := _make_sphere_mesh(0.05, metal)
-			handle_l.position = Vector3(-0.15, size.y * 0.5, size.z * 0.5 + 0.05)
+			handle_l.position = Vector3(-0.15, size.y * 0.5, handle_z)
 			decor.add_child(handle_l)
 			var handle_r := _make_sphere_mesh(0.05, metal)
-			handle_r.position = Vector3(0.15, size.y * 0.5, size.z * 0.5 + 0.05)
+			handle_r.position = Vector3(0.15, size.y * 0.5, handle_z)
 			decor.add_child(handle_r)
 		"safe":
 			# 圆形密码盘 + 周围 4 个铆钉
 			var dial := _make_cylinder_mesh(0.12, 0.04, Color("#3a3a3a"))
-			dial.transform = Transform3D(Basis(Vector3(1, 0, 0), PI * 0.5), Vector3(0, size.y * 0.5, size.z * 0.5 + 0.025))
+			dial.transform = Transform3D(Basis(Vector3(1, 0, 0), PI * 0.5), Vector3(0, size.y * 0.5, dial_z))
 			decor.add_child(dial)
 			var center_y: float = size.y * 0.5
-			var z_off: float = size.z * 0.5 + 0.005
 			for offset in [Vector2(-0.3, 0.3), Vector2(0.3, 0.3), Vector2(-0.3, -0.3), Vector2(0.3, -0.3)]:
 				var rivet := _make_sphere_mesh(0.025, metal)
-				rivet.position = Vector3(offset.x, center_y + offset.y, z_off)
+				rivet.position = Vector3(offset.x, center_y + offset.y, rivet_z)
 				decor.add_child(rivet)
 
 func _make_box_mesh(s: Vector3, col: Color) -> MeshInstance3D:

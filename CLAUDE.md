@@ -124,8 +124,9 @@ Logger.event("some_local_check", {"x": 42})
 | [test/unit/test_round_end_rpc.gd](test/unit/test_round_end_rpc.gd) | **Phase 2B v2 — Per-peer 独立 done + 团队订单结算**:extraction_zone 多人发 mm.request_extract(收集 inv_paths)→ notify_extracted(host 直接调本地 / client rpc_id);MM 加 _peer_round_status / _peer_inventories / _last_team_result / _global_round_active 字段;peer_done / team_result_ready 信号;_rpc_request_peer_done(host 校验 + 广播 + _check_all_done) / _rpc_apply_peer_done(本人 → end_round;其他 → emit signal hide Player) / _rpc_apply_team_result;_check_all_done_and_settle 收集撤离 peer 物品 → completion_for → reward_per_peer 广播;broadcast_round_end_timeout(host timer 到 0 时把所有 playing 标 timeout);host _process 全局 timer(client 不动);broadcast_round_start 重置 per-peer 状态 |
 | [test/unit/test_home_multiplayer.gd](test/unit/test_home_multiplayer.gd) | **Phase 2B Tier B7**:home.gd 加 _ready_toggle / _mp_player_list / _enter_btn 字段;_on_enter 多人 host 调 mm.start_game(单人 change_scene main 旧路径);_on_ready_toggled 调 mm.set_local_ready;订阅 mm.peer_joined/peer_left/all_ready_changed/game_started;_setup_multiplayer_ui 在 _ready 调 |
 | [test/unit/test_restart_round_clean.gd](test/unit/test_restart_round_clean.gd) | **Phase 2B Tier B8**:start_round 重置 _extracted_this_round / _next_entry_uid / time_left / round_active;清 LocalInspectLog;emit round_started;完整 round 重开循环(start → end → start)状态干净;result_panel._on_restart 必须 paused = false 在 change_scene 之前 + clear_active 订单 |
+| [test/unit/test_monster.gd](test/unit/test_monster.gd) | **§五 饕餮怪物寻人(单人 MVP)**:EventBus 加 sound_emitted/monster_caught_player signals;GameSession.apply_time_penalty(扣时间 + 立即广播 round_tick);Player 加 is_invincible/grant_invincibility/_tick_sound_emit(stance 周期 emit 声音);Monster 状态机 IDLE/INVESTIGATE/SEARCH/CHASE/RETURNING/COOLDOWN(Plan A:IDLE 聋瞎 / 90° 前向锥 4m / 仅警觉态查视野 / CHASE→1.5s 跟丢→SEARCH 4s→RETURNING 走回 spawn→IDLE);main.gd 单人 spawn 怪物(多人不 spawn)+ round_started 重置 |
 
-跑全量 = 247 测试 / 770 assert。
+跑全量 = 306 测试 / 913 assert。
 
 ## 已知小 bug(P2,先记录不修)
 

@@ -51,6 +51,20 @@ func mark_extracted_this_round() -> void:
 	# 多人下 _rpc_apply_round_end 根据这个判断 reason
 	_extracted_this_round = true
 
+# 外卖侠 §五:怪物 catch 玩家 → 扣时间(占位,正式版换小游戏)
+# 只 round_active 期间生效;clamp time_left ≥ 0
+func apply_time_penalty(seconds: float) -> void:
+	if not round_active:
+		return
+	time_left = max(0.0, time_left - seconds)
+	var bus = get_node_or_null("/root/EventBus")
+	if bus != null:
+		if bus.has_signal("monster_caught_player"):
+			bus.monster_caught_player.emit(seconds)
+		# 立即广播 round_tick 让 HUD 看到时间跳一下
+		if bus.has_signal("round_tick"):
+			bus.round_tick.emit(time_left, ROUND_TIME)
+
 func end_round(reason: String) -> void:
 	if not round_active:
 		return
