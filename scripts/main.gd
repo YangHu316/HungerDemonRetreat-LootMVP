@@ -45,6 +45,8 @@ func _ready() -> void:
 	# §07 寻路:Foundation 加 navigation_geometry group(地板=可走面)+ 烘焙 navmesh
 	# (墙在 _add_wall 已加 group;容器在 container.gd._ready 加 group)
 	_setup_navigation()
+	# Phase 3B 调试:订阅 sound_emitted 在事件位置弹一个橙色 ring(0.6s fade)
+	_setup_sound_ring_debug()
 
 	var gs = get_node("/root/GameSession")
 	if not gs.round_started.is_connected(_on_round_started):
@@ -153,6 +155,44 @@ func _setup_navigation() -> void:
 	# 容器 / hiding_spot 实例的 _ready 已在 main._ready 之前跑(子节点先 ready)
 	# 此时 group 已就位,可以烘焙
 	nav_region.bake_navigation_mesh(true)
+
+# Phase 3B 调试:订阅 sound_emitted,事件位置弹 transient 橙色 ring(0.6s fade out)
+# 玩家/容器/门/拾取的发声都会触发 — 直观看到声音传播半径
+func _setup_sound_ring_debug() -> void:
+	var bus = get_node_or_null("/root/EventBus")
+	if bus == null:
+		return
+	if bus.has_signal("sound_emitted") and not bus.sound_emitted.is_connected(_on_sound_emitted_debug):
+		bus.sound_emitted.connect(_on_sound_emitted_debug)
+
+func _on_sound_emitted_debug(pos: Vector3, radius: float) -> void:
+	var ring := MeshInstance3D.new()
+	ring.name = "SoundRingDebug"
+	var torus := TorusMesh.new()
+	# 圈宽 8cm,贴地
+	torus.inner_radius = max(0.05, radius - 0.04)
+	torus.outer_radius = radius + 0.04
+	torus.ring_segments = 4
+	torus.rings = 64
+	ring.mesh = torus
+	ring.position = Vector3(pos.x, 0.06, pos.z)
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = Color(1.0, 0.55, 0.15, 0.85)  # 橙色
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.55, 0.15)
+	mat.emission_energy_multiplier = 1.2
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ring.material_override = mat
+	add_child(ring)
+	# Tween:0.6s 从 alpha 0.85 → 0,scale 1 → 1.15,完了 free
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.6)
+	tw.tween_property(ring, "scale", Vector3(1.15, 1.15, 1.15), 0.6)
+	tw.chain().tween_callback(Callable(ring, "queue_free"))
 
 # 外卖侠 §五:单人模式 spawn 一个怪物(多人留给 Phase 2C)
 func _spawn_monster_if_single() -> void:

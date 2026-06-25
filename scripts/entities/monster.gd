@@ -66,6 +66,9 @@ var _rng: RandomNumberGenerator = null
 var _nav_agent: NavigationAgent3D = null
 var _mesh: MeshInstance3D = null
 var _light: OmniLight3D = null
+# 调试:头顶状态 Label3D
+var _state_label: Label3D = null
+var _state_label_last: int = -1
 
 func _ready() -> void:
 	add_to_group("monster")
@@ -81,6 +84,7 @@ func _ready() -> void:
 			_bus.sound_emitted.connect(_on_sound_emitted)
 	_build_visual()
 	_build_nav_agent()
+	_build_state_label()
 
 func _build_visual() -> void:
 	_mesh = MeshInstance3D.new()
@@ -128,6 +132,20 @@ func _build_nav_agent() -> void:
 	_nav_agent.height = 1.6
 	_nav_agent.avoidance_enabled = false  # 单怪物,不需要 agent 间避障
 	add_child(_nav_agent)
+
+# 调试:头顶 Label3D 显示当前 state(billboard 跟相机)
+func _build_state_label() -> void:
+	_state_label = Label3D.new()
+	_state_label.name = "StateLabel"
+	_state_label.text = "IDLE"
+	_state_label.font_size = 36
+	_state_label.outline_size = 8
+	_state_label.modulate = Color(1.0, 1.0, 1.0)
+	_state_label.outline_modulate = Color(0, 0, 0)
+	_state_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_state_label.no_depth_test = true
+	_state_label.position = Vector3(0, 2.2, 0)  # 头顶上方
+	add_child(_state_label)
 
 func _physics_process(delta: float) -> void:
 	# round 不活跃 → idle 静止
@@ -185,6 +203,30 @@ func _physics_process(delta: float) -> void:
 		_stuck_timer = 0.0
 		_stuck_last_pos = global_position
 	move_and_slide()
+	# 调试:头顶 state 标签
+	_update_state_label()
+
+func _update_state_label() -> void:
+	if _state_label == null or state == _state_label_last:
+		return
+	_state_label_last = state
+	var txt: String = "?"
+	var col: Color = Color.WHITE
+	match state:
+		State.IDLE:
+			txt = "IDLE"; col = Color(0.7, 0.7, 0.7)
+		State.INVESTIGATE:
+			txt = "INVESTIGATE"; col = Color(1.0, 0.85, 0.3)  # 黄
+		State.SEARCH:
+			txt = "SEARCH"; col = Color(1.0, 0.6, 0.2)  # 橙
+		State.CHASE:
+			txt = "CHASE"; col = Color(1.0, 0.25, 0.25)  # 红
+		State.RETURNING:
+			txt = "RETURNING"; col = Color(0.4, 0.7, 1.0)  # 蓝
+		State.COOLDOWN:
+			txt = "COOLDOWN"; col = Color(0.6, 0.6, 0.8)
+	_state_label.text = txt
+	_state_label.modulate = col
 
 # §五 CHASE:实时追玩家当前位置(看见才进此态)
 func _tick_chase(delta: float) -> void:
