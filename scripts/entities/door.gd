@@ -9,6 +9,8 @@ class_name Door
 const OPEN_ANGLE_DEG: float = 90.0
 const CLOSE_ANGLE_DEG: float = 0.0
 const TWEEN_TIME: float = 0.18
+# §06 Phase 3B 发声覆盖 — spec 05§1.2:大门·开门 8-10m。取 8 作 MVP
+const DOOR_TOGGLE_SOUND_RADIUS: float = 8.0
 
 # 铰链相对 Door 的局部位置（左侧边）
 const HINGE_LOCAL: Vector3 = Vector3(-0.6, 0.0, 0.0)
@@ -115,6 +117,22 @@ func _apply_toggle_local() -> void:
 	tw.chain().tween_callback(Callable(self, "_on_tween_done"))
 	if _bus != null and _bus.has_signal("door_toggled"):
 		_bus.door_toggled.emit(self, is_open)
+	# §06 Phase 3B 发声 — 大门开关 8m(单人;多人 host 权威 Phase 2C 再做)
+	_emit_door_sound()
+
+# §06 Phase 3B 大门开/关声音(spec 05§1.2)
+func _emit_door_sound() -> void:
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm != null and mm.has_method("is_single") and not mm.is_single():
+		return
+	if _bus == null or not _bus.has_signal("sound_emitted"):
+		return
+	# 用 DoorAssembly(parent)的位置作声源点 — 门本身在 hinge 旋转,位置不准
+	var pos: Vector3 = global_position
+	var p: Node3D = get_parent() as Node3D
+	if p != null:
+		pos = p.global_position
+	_bus.sound_emitted.emit(pos, DOOR_TOGGLE_SOUND_RADIUS)
 
 func _apply_collision_transform(angle_rad: float) -> void:
 	# 围绕 HINGE_LOCAL 把 COLL_BASE_POS 旋转 angle_rad

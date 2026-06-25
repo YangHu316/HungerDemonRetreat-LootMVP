@@ -48,6 +48,8 @@ var current_sound_radius: float = Stance.WALK_SOUND_RADIUS
 # 外卖侠 §五:声音 emit 节流 + 怪物 catch 后 2s 无敌
 const SOUND_EMIT_INTERVAL: float = 0.4  # 移动时每 0.4s emit 一次
 const POST_CATCH_INVINCIBLE: float = 2.0
+# §06 Phase 3B 拾取入包发声(spec 05§1.2)
+const PICKUP_SOUND_RADIUS: float = 1.5
 var _sound_emit_timer: float = 0.0
 var _invincible_until: float = 0.0  # Time.get_ticks_msec/1000.0 时刻;> 当前 = 无敌
 # 可视化:声音传播圈(green sneak / yellow walk / red run,半径=current_sound_radius)
@@ -165,6 +167,9 @@ func _ready() -> void:
 			_bus.container_closed.connect(_on_container_closed)
 		if _bus.has_signal("round_ended") and not _bus.round_ended.is_connected(_on_round_ended):
 			_bus.round_ended.connect(_on_round_ended)
+		# §06 Phase 3B 拾取入包发声(spec 05§1.2:1.5m 近乎无声)
+		if _bus.has_signal("item_moved") and not _bus.item_moved.is_connected(_on_item_moved):
+			_bus.item_moved.connect(_on_item_moved)
 
 	for ez in get_tree().get_nodes_in_group("extraction_zone"):
 		if ez.has_signal("countdown_started") and not ez.countdown_started.is_connected(_on_extraction_started):
@@ -565,6 +570,21 @@ func _on_round_ended(_total: int, reason: String) -> void:
 		_play_celebration()
 	else:
 		_play_defeat()
+
+# §06 Phase 3B 拾取入包发声 — spec 05§1.2:1.5m 近乎无声
+# 容器→背包(拾取)和 stash→背包(取仓库)都算"入包",emit 1.5m
+# inventory→inventory(整理)/ inventory→container(放回)不 emit
+func _on_item_moved(_item, from_grid_id: String, to_grid_id: String, _x: int, _y: int, _rotated: bool) -> void:
+	if to_grid_id != "inventory":
+		return
+	if from_grid_id == "inventory":
+		return  # 整理 / 旋转,不算拾取
+	# 多人模式跳过(各 peer 本地 emit 会重复触发 monster — Phase 2C 再做 host 权威)
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm != null and mm.has_method("is_single") and not mm.is_single():
+		return
+	if _bus != null and _bus.has_signal("sound_emitted"):
+		_bus.sound_emitted.emit(global_position, PICKUP_SOUND_RADIUS)
 
 func _play_celebration() -> void:
 	if body_root == null:

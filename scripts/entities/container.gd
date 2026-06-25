@@ -131,6 +131,16 @@ func get_search_time() -> float:
 		CType.SAFE: return 4.0
 	return 1.5
 
+# §06 Phase 3B 发声覆盖 — spec 05§1.2 容器搜刮噪音
+# 低噪(纸箱/货架/抽屉/衣柜): 4m
+# 中噪(冰柜/保温柜/储物柜/保险箱): 8m
+func get_search_sound_radius() -> float:
+	match type:
+		CType.DRAWER: return 4.0
+		CType.CABINET: return 4.0
+		CType.SAFE: return 8.0
+	return 4.0
+
 func _loot_table_path() -> String:
 	match type:
 		CType.DRAWER: return "res://resources/loot_tables/drawer_loot.tres"
@@ -263,6 +273,9 @@ func open() -> void:
 		return
 	opened = true
 	get_node("/root/EventBus").container_opened.emit(self)
+	# §06 Phase 3B:容器搜刮发声(spec 05§1.2)— 单人模式 emit
+	# 多人 Phase 2C 再做 host 权威(避免每个 peer 重复触发 monster)
+	_emit_search_sound()
 	# Phase 2B Tier B4:has_been_opened 全局同步(已搜 badge 给所有 peer 显示)
 	# - 单人:本地标记
 	# - 多人:走 mm.notify_container_opened → host 广播 → 各 peer _apply_opened_local
@@ -304,6 +317,17 @@ func _set_searched_visual() -> void:
 		var m: StandardMaterial3D = mesh_instance.material_override
 		m.albedo_color = m.albedo_color * Color(0.4, 0.4, 0.4, 1.0)
 	looted_label.visible = true
+
+# §06 Phase 3B 容器搜刮发声 — spec 05§1.2:抽屉/衣柜 4m / 保险箱 8m
+# 多人模式跳过(各 peer 本地 emit 会重复触发 monster — Phase 2C 再做 host 权威)
+func _emit_search_sound() -> void:
+	var mm = get_node_or_null("/root/MultiplayerManager")
+	if mm != null and mm.has_method("is_single") and not mm.is_single():
+		return
+	var bus = get_node_or_null("/root/EventBus")
+	if bus == null or not bus.has_signal("sound_emitted"):
+		return
+	bus.sound_emitted.emit(global_position, get_search_sound_radius())
 
 # §6.2 容器装饰：drawer 抽屉缝+把手；cabinet 门缝+把手；safe 密码盘+门缝
 # 防 z-fight:所有装饰 z 推到 size.z*0.5 + 0.020,后面留 5-10mm 空(消除共面)
