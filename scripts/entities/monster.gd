@@ -174,6 +174,10 @@ func _tick_chase(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
 		state = State.SEARCH
 		return
+	# §06 玩家躲了 → 切 SEARCH(看不见目标)
+	if _player_is_hidden(player):
+		state = State.SEARCH
+		return
 	var d2: float = global_position.distance_squared_to(player.global_position)
 	if d2 <= CATCH_RADIUS * CATCH_RADIUS:
 		_catch(player)
@@ -228,10 +232,19 @@ func _player_is_invincible(player: Node) -> bool:
 		return player.is_invincible()
 	return false
 
+# §06:玩家是否在躲点中(hidden)→ 距离 catch / 视野 / CHASE 都跳过
+# 唯一抓到躲藏玩家的途径是 _check_hiding_spot_detect 的概率 roll
+func _player_is_hidden(player: Node) -> bool:
+	if player == null or not is_instance_valid(player):
+		return false
+	if player.has_method("is_hidden_now"):
+		return player.is_hidden_now()
+	return false
+
 func _tick_investigate(delta: float) -> void:
-	# 接触玩家 → catch
+	# 接触玩家 → catch(§06 躲藏中跳过,只能走 _check_hiding_spot_detect)
 	var player: Node3D = _find_local_player()
-	if player != null and is_instance_valid(player):
+	if player != null and is_instance_valid(player) and not _player_is_hidden(player):
 		var d2: float = global_position.distance_squared_to(player.global_position)
 		if d2 <= CATCH_RADIUS * CATCH_RADIUS:
 			_catch(player)
@@ -248,9 +261,9 @@ func _tick_investigate(delta: float) -> void:
 
 # §五 SEARCH 状态:到达声源后在附近游荡,等新声音 / catch 玩家
 func _tick_search(delta: float) -> void:
-	# Catch 检查同 INVESTIGATE
+	# Catch 检查同 INVESTIGATE(§06 躲藏中跳过)
 	var player: Node3D = _find_local_player()
-	if player != null and is_instance_valid(player):
+	if player != null and is_instance_valid(player) and not _player_is_hidden(player):
 		var d2: float = global_position.distance_squared_to(player.global_position)
 		if d2 <= CATCH_RADIUS * CATCH_RADIUS:
 			_catch(player)
@@ -310,9 +323,9 @@ func _check_hiding_spot_detect() -> void:
 # 路上仍可被新声音(_on_sound_emitted)/ 视野(_physics_process gate)重新触发 INVESTIGATE/CHASE
 # 走到家 → IDLE(回到聋瞎,玩家声圈外再次绝对安全)
 func _tick_return(delta: float) -> void:
-	# 意外撞上玩家仍 catch
+	# 意外撞上玩家仍 catch(§06 躲藏中跳过)
 	var player: Node3D = _find_local_player()
-	if player != null and is_instance_valid(player):
+	if player != null and is_instance_valid(player) and not _player_is_hidden(player):
 		var d2: float = global_position.distance_squared_to(player.global_position)
 		if d2 <= CATCH_RADIUS * CATCH_RADIUS:
 			_catch(player)
@@ -369,6 +382,9 @@ func _on_sound_emitted(pos: Vector3, radius: float) -> void:
 func _catch(player: Node3D) -> void:
 	# 玩家无敌期间不 catch
 	if player.has_method("is_invincible") and player.is_invincible():
+		return
+	# §06 防御:玩家躲藏中不 catch(_check_hiding_spot_detect 内部会先 unhide 再 catch)
+	if player.has_method("is_hidden_now") and player.is_hidden_now():
 		return
 	# 扣时间
 	if _gs != null and _gs.has_method("apply_time_penalty"):

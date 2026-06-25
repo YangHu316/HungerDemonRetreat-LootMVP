@@ -531,6 +531,68 @@ func test_monster_detect_skips_spot_outside_dist() -> void:
 	m._check_hiding_spot_detect()
 	assert_eq(m._rolled_spots.size(), 0, "距离 > SPOT_DETECT_DIST 不 roll")
 
+# §06 关键回归:躲藏中玩家不可被距离 catch(只能走 _check_hiding_spot_detect 概率)
+# 用户报 bug:怪物 SEARCH 中走到躲点 0.8m 内立刻 catch,绕过了 detect_prob
+
+func test_monster_proximity_catch_skipped_when_player_hidden() -> void:
+	# 玩家紧贴怪物(0.5m,远小于 CATCH_RADIUS 0.8m),但躲藏中 → 不能被 catch
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	_gs.time_left = 600.0
+	var fake := FakeHiddenPlayer.new()
+	fake.add_to_group("player")  # 让 _find_local_player 找得到
+	add_child_autofree(fake)
+	fake.global_position = Vector3(0.5, 0.0, 0.0)  # 距离 0.5m,在 CATCH_RADIUS 内
+	# 各 tick 都走一遍,验证都不 catch
+	m.state = m.State.SEARCH
+	m._tick_search(0.016)
+	assert_almost_eq(_gs.time_left, 600.0, 0.01,
+		"SEARCH 中玩家躲藏 + 0.5m 也不能被距离 catch")
+	assert_ne(m.state, m.State.COOLDOWN,
+		"SEARCH 距离 catch 不应触发(玩家躲藏)")
+
+	m.state = m.State.INVESTIGATE
+	m.sound_target = Vector3(2.0, 0.0, 0.0)
+	m._tick_investigate(0.016)
+	assert_almost_eq(_gs.time_left, 600.0, 0.01,
+		"INVESTIGATE 中玩家躲藏 + 0.5m 也不能被距离 catch")
+
+	m.state = m.State.CHASE
+	m._tick_chase(0.016)
+	assert_almost_eq(_gs.time_left, 600.0, 0.01,
+		"CHASE 中玩家躲藏 + 0.5m 也不能被距离 catch")
+
+	m.state = m.State.RETURNING
+	m._tick_return(0.016)
+	assert_almost_eq(_gs.time_left, 600.0, 0.01,
+		"RETURNING 中玩家躲藏 + 0.5m 也不能被距离 catch")
+
+func test_monster_proximity_catch_works_when_player_unhidden() -> void:
+	# 反面验证:不躲时 0.5m 距离仍正常 catch(防止过度修复)
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	_gs.time_left = 600.0
+	var fake := FakeHiddenPlayer.new()
+	fake.add_to_group("player")
+	fake.unhide()  # 确保不躲
+	add_child_autofree(fake)
+	fake.global_position = Vector3(0.5, 0.0, 0.0)
+	m.state = m.State.SEARCH
+	m._tick_search(0.016)
+	assert_almost_eq(_gs.time_left, 420.0, 0.5,
+		"未躲 + 0.5m 应正常 catch(扣 180s)")
+
+func test_monster_catch_method_skips_hidden_player() -> void:
+	# 防御性:即使有 path 调到 _catch,玩家躲藏中应被拒
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	_gs.time_left = 600.0
+	var fake := FakeHiddenPlayer.new()
+	add_child_autofree(fake)
+	m._catch(fake)
+	assert_almost_eq(_gs.time_left, 600.0, 0.01,
+		"_catch 必须查 is_hidden_now 防止意外 catch 躲藏玩家")
+
 # ── 辅助 ──
 
 func _spawn_monster_at(pos: Vector3) -> CharacterBody3D:
