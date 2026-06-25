@@ -42,6 +42,9 @@ func _ready() -> void:
 
 	_spawn_players()
 	_spawn_monster_if_single()
+	# §07 寻路:Foundation 加 navigation_geometry group(地板=可走面)+ 烘焙 navmesh
+	# (墙在 _add_wall 已加 group;容器在 container.gd._ready 加 group)
+	_setup_navigation()
 
 	var gs = get_node("/root/GameSession")
 	if not gs.round_started.is_connected(_on_round_started):
@@ -134,6 +137,22 @@ func _bind_local(p: CharacterBody3D) -> void:
 func _is_multiplayer() -> bool:
 	var mm = get_node_or_null("/root/MultiplayerManager")
 	return mm != null and not mm.is_single()
+
+# §07 寻路:Foundation 加 navigation_geometry group + 烘焙 navmesh
+# - 墙在 _add_wall 已加 group(_build_walls 后所有墙就位)
+# - 容器在 container.gd._ready 加 group
+# - 门不加 group → 烘焙忽略 → 路径可穿门道
+# - 烘焙完后 NavigationServer 自动让 NavigationAgent3D 找路
+func _setup_navigation() -> void:
+	var foundation = get_node_or_null("World/Foundation")
+	if foundation != null:
+		foundation.add_to_group("navigation_geometry")
+	var nav_region = get_node_or_null("World/NavigationRegion3D") as NavigationRegion3D
+	if nav_region == null:
+		return
+	# 容器 / hiding_spot 实例的 _ready 已在 main._ready 之前跑(子节点先 ready)
+	# 此时 group 已就位,可以烘焙
+	nav_region.bake_navigation_mesh(true)
 
 # 外卖侠 §五:单人模式 spawn 一个怪物(多人留给 Phase 2C)
 func _spawn_monster_if_single() -> void:
@@ -276,6 +295,9 @@ func _add_wall(parent: Node, pos: Vector3, size: Vector3, mat: Material, n: Stri
 	sb.collision_layer = 1
 	sb.collision_mask = 0
 	sb.position = pos
+	# §07 寻路:墙加入 navigation_geometry group(navmesh 烘焙时作障碍物)
+	# 门不加 → 烘焙忽略 → 路径可穿门道(关门时物理仍卡)
+	sb.add_to_group("navigation_geometry")
 	parent.add_child(sb)
 
 	var mi := MeshInstance3D.new()

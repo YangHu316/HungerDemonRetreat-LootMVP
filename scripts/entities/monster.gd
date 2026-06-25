@@ -20,8 +20,6 @@ const CATCH_RADIUS: float = 0.8
 const CATCH_TIME_PENALTY: float = 180.0  # 3 分钟(MVP 占位,spec 是转盘小游戏)
 const COOLDOWN_TIME: float = 5.0
 const REACH_TARGET_DIST: float = 0.5     # 到声源算"到达"
-const WALL_RAYCAST_LEN: float = 1.0      # 前方探墙距离
-const SIDE_OFFSET_DEG: float = 35.0      # 撞墙时左右偏角
 # §五 SEARCH:到声源后游荡找人,超时回家
 # spec 05§2.1:搜寻 12-15s,移动 ×1.1。取中值 13s
 const SEARCH_DURATION: float = 13.0
@@ -56,7 +54,9 @@ var _rolled_spots: Dictionary = {}  # instance_id → bool
 var _bus: Node = null
 var _gs: Node = null
 var _rng: RandomNumberGenerator = null
-var _wall_raycast: RayCast3D = null
+# §07 寻路:NavigationAgent3D 替代旧的单条 raycast(支持跨房间 + 绕容器)
+# 没有 navmesh 时(单测)agent 立刻 finished,_move_toward 走 fallback 直走
+var _nav_agent: NavigationAgent3D = null
 var _mesh: MeshInstance3D = null
 var _light: OmniLight3D = null
 
@@ -73,7 +73,7 @@ func _ready() -> void:
 		if not _bus.sound_emitted.is_connected(_on_sound_emitted):
 			_bus.sound_emitted.connect(_on_sound_emitted)
 	_build_visual()
-	_build_raycast()
+	_build_nav_agent()
 
 func _build_visual() -> void:
 	_mesh = MeshInstance3D.new()
@@ -111,13 +111,16 @@ func _build_visual() -> void:
 	add_child(coll)
 	# 不画怪物圈 — 判定是"玩家声音圈是否包住怪物",怪物本身没有"听感半径"
 
-func _build_raycast() -> void:
-	_wall_raycast = RayCast3D.new()
-	_wall_raycast.name = "WallRay"
-	_wall_raycast.target_position = Vector3(0, 0, -WALL_RAYCAST_LEN)
-	_wall_raycast.collision_mask = 1
-	_wall_raycast.position.y = 1.0
-	add_child(_wall_raycast)
+func _build_nav_agent() -> void:
+	_nav_agent = NavigationAgent3D.new()
+	_nav_agent.name = "NavAgent"
+	_nav_agent.path_desired_distance = 0.5
+	_nav_agent.target_desired_distance = 0.4
+	_nav_agent.path_max_distance = 50.0
+	_nav_agent.radius = 0.4
+	_nav_agent.height = 1.6
+	_nav_agent.avoidance_enabled = false  # 单怪物,不需要 agent 间避障
+	add_child(_nav_agent)
 
 func _physics_process(delta: float) -> void:
 	# round 不活跃 → idle 静止
@@ -338,23 +341,48 @@ func _tick_return(delta: float) -> void:
 		return
 	_move_toward(spawn_pos, MOVE_SPEED * 0.8, delta)
 
-# 朝目标移动 + 简单墙体绕行(给 INVESTIGATE / SEARCH 共用)
+# §07 寻路:NavigationAgent3D 路径 + 没 navmesh 时 fallback 直走
+# 跨房间 / 绕容器自动支持(navmesh 烘焙时墙/容器为障碍,门不烘焙 → 路径可穿门道)
 func _move_toward(target: Vector3, speed: float, delta: float) -> void:
-	var dir: Vector3 = (target - global_position)
-	dir.y = 0.0
-	if dir.length() < 0.01:
+	var to_target: Vector3 = target - global_position
+	to_target.y = 0.0
+	if to_target.length() < 0.01:
 		velocity = Vector3.ZERO
 		return
-	dir = dir.normalized()
+
+	# Fallback:没 nav agent(理论不会发生)→ 直走
+	if _nav_agent == null:
+		var dir: Vector3 = to_target.normalized()
+		_apply_velocity_with_rotation(dir, speed, delta)
+		return
+
+	# Re-path 仅在目标移动 > 0.2m 时(优化:CHASE 实时追玩家不要每帧 re-path)
+	if _nav_agent.target_position.distance_to(target) > 0.2:
+		_nav_agent.target_position = target
+
+	# 没 navmesh 时(单测 / 烘焙未完成):agent 立刻 finished + far from target → 直走
+	if _nav_agent.is_navigation_finished():
+		if to_target.length() > 0.5:
+			# 没路径但仍要追(单测兼容 / navmesh 没烘成功)
+			var dir2: Vector3 = to_target.normalized()
+			_apply_velocity_with_rotation(dir2, speed, delta)
+		else:
+			velocity = Vector3.ZERO
+		return
+
+	# 正常路径:朝下一个 waypoint
+	var next_pos: Vector3 = _nav_agent.get_next_path_position()
+	var step: Vector3 = next_pos - global_position
+	step.y = 0.0
+	if step.length() < 0.01:
+		velocity = Vector3.ZERO
+		return
+	var dir3: Vector3 = step.normalized()
+	_apply_velocity_with_rotation(dir3, speed, delta)
+
+func _apply_velocity_with_rotation(dir: Vector3, speed: float, delta: float) -> void:
 	var target_yaw: float = atan2(dir.x, dir.z) + PI
 	rotation.y = lerp_angle(rotation.y, target_yaw, delta * 6.0)
-	# 前方探墙 → 撞了就侧偏
-	if _wall_raycast != null:
-		_wall_raycast.force_raycast_update()
-		if _wall_raycast.is_colliding():
-			var side_sign: float = 1.0 if _rng.randf() < 0.5 else -1.0
-			var rot := Basis(Vector3.UP, deg_to_rad(SIDE_OFFSET_DEG) * side_sign)
-			dir = rot * dir
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
 	velocity.y = 0.0

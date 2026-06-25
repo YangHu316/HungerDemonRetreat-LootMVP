@@ -127,8 +127,9 @@ Logger.event("some_local_check", {"x": 42})
 | [test/unit/test_monster.gd](test/unit/test_monster.gd) | **§五 饕餮怪物寻人(单人 MVP)**:EventBus 加 sound_emitted/monster_caught_player signals;GameSession.apply_time_penalty(扣时间 + 立即广播 round_tick);Player 加 is_invincible/grant_invincibility/_tick_sound_emit(stance 周期 emit 声音);Monster 状态机 IDLE/INVESTIGATE/SEARCH/CHASE/RETURNING/COOLDOWN(Plan A:IDLE 聋瞎 / 90° 前向锥 4m / 仅警觉态查视野 / CHASE→1.5s 跟丢→SEARCH 4s→RETURNING 走回 spawn→IDLE);main.gd 单人 spawn 怪物(多人不 spawn) + round_started 重置;§06 视野 hidden 检查 + _check_hiding_spot_detect SEARCH 极近 1.5m 一次 roll(命中 unhide+_catch) |
 | [test/unit/test_hiding_spot.gd](test/unit/test_hiding_spot.gd) | **§06 玩家躲避 — HidingSpot**:capacity 1 / 2 + detection_prob export;add/remove/get_occupants 维护;group hiding_spots + interactables;容量满拒绝 add;invalid occupant 自动清理;get_prompt 含 E 键 |
 | [test/unit/test_player_hide.gd](test/unit/test_player_hide.gd) | **§06 玩家躲避 — Player hide**:project.godot hide action E(keycode 69);Player 加 is_hidden/is_hidden_now/hide_in/unhide/set_nearby_hiding_spot/clear_nearby_hiding_spot;_input hide 分支必须在 movement_locked 检查前(否则躲了出不来);_tick_sound_emit 查 is_hidden(躲藏中声半径 ≈ 0);hide_in 容量满被拒;unhide 状态恢复 |
+| [test/unit/test_monster.gd](test/unit/test_monster.gd) §07 部分 | **§07 寻路 — NavigationAgent3D**:Monster 用 NavigationAgent3D 替代 _wall_raycast(支持跨房间 / 绕容器);_move_toward 查 target_position / get_next_path_position / is_navigation_finished(没 navmesh fallback 直走);main.tscn 加 NavigationRegion3D 配 source_group_name=navigation_geometry;main.gd._setup_navigation 把 Foundation 加 group + 调 bake_navigation_mesh;_add_wall 把墙加 navigation_geometry group;container.gd._ready 把容器加 group(障碍);门不加 group(烘焙忽略 → 路径可穿门道) |
 
-跑全量 = 340 测试 / 983 assert。
+跑全量 = 350 测试 / 1007 assert。
 
 ## 已知小 bug(P2,先记录不修)
 

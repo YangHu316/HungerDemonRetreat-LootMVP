@@ -516,6 +516,88 @@ func test_monster_detect_only_rolls_once_per_spot() -> void:
 	m._check_hiding_spot_detect()
 	assert_eq(m._rolled_spots.size(), 1, "第 2 次仍 1 项(同 spot 不重复 roll)")
 
+# ── §07 寻路:NavigationAgent3D + navmesh group 配置 ──
+
+func test_monster_uses_navigation_agent() -> void:
+	# 源码层:Monster 必须用 NavigationAgent3D 替代旧 _wall_raycast
+	var src: String = load("res://scripts/entities/monster.gd").source_code
+	assert_true(src.contains("NavigationAgent3D"),
+		"Monster 必须用 NavigationAgent3D(跨房间寻路)")
+	assert_true(src.contains("_nav_agent"),
+		"Monster 必须有 _nav_agent 字段")
+	assert_false(src.contains("_wall_raycast"),
+		"_wall_raycast 应已删除(被 NavigationAgent3D 替代)")
+	assert_false(src.contains("WALL_RAYCAST_LEN"),
+		"WALL_RAYCAST_LEN 常量应已删除")
+
+func test_monster_move_toward_uses_nav_agent() -> void:
+	# _move_toward 必须用 _nav_agent.target_position / get_next_path_position
+	var src: String = load("res://scripts/entities/monster.gd").source_code
+	var i: int = src.find("func _move_toward")
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0: j = src.length()
+	var body: String = src.substr(i, j - i)
+	assert_true(body.contains("target_position"),
+		"_move_toward 必须 set _nav_agent.target_position")
+	assert_true(body.contains("get_next_path_position"),
+		"_move_toward 必须用 get_next_path_position()")
+	assert_true(body.contains("is_navigation_finished"),
+		"_move_toward 必须查 is_navigation_finished(没 navmesh fallback)")
+
+func test_main_setup_navigation_function() -> void:
+	# main.gd 必须有 _setup_navigation 函数 + 调用 bake_navigation_mesh
+	var src: String = load("res://scripts/main.gd").source_code
+	assert_true(src.contains("func _setup_navigation"),
+		"main.gd 必须有 _setup_navigation 函数")
+	assert_true(src.contains("bake_navigation_mesh"),
+		"main.gd 必须调 bake_navigation_mesh")
+	assert_true(src.contains("navigation_geometry"),
+		"main.gd 必须把 Foundation 加 navigation_geometry group")
+
+func test_add_wall_adds_to_nav_group() -> void:
+	# _add_wall 创建的墙必须加 navigation_geometry group(navmesh 烘焙时作障碍)
+	var src: String = load("res://scripts/main.gd").source_code
+	var i: int = src.find("func _add_wall")
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0: j = src.length()
+	var body: String = src.substr(i, j - i)
+	assert_true(body.contains("navigation_geometry"),
+		"_add_wall 必须把墙加 navigation_geometry group")
+
+func test_container_in_nav_group() -> void:
+	# container.gd._ready 必须加 navigation_geometry group(navmesh 障碍)
+	var src: String = load("res://scripts/entities/container.gd").source_code
+	var i: int = src.find("func _ready")
+	var j: int = src.find("\nfunc ", i + 5)
+	if j < 0: j = src.length()
+	var body: String = src.substr(i, j - i)
+	assert_true(body.contains("navigation_geometry"),
+		"container._ready 必须加 navigation_geometry group(怪物绕行容器)")
+
+func test_main_tscn_has_navigation_region() -> void:
+	# main.tscn 必须有 NavigationRegion3D 节点(放在 World 下)
+	var f := FileAccess.open("res://scenes/main.tscn", FileAccess.READ)
+	assert_not_null(f, "main.tscn 必须能读")
+	var content: String = f.get_as_text()
+	f.close()
+	assert_true(content.contains("NavigationRegion3D"),
+		"main.tscn 必须有 NavigationRegion3D 节点")
+	assert_true(content.contains("navigation_geometry"),
+		"NavigationMesh 必须配置 source_group_name = navigation_geometry")
+
+func test_monster_move_toward_fallback_when_no_navmesh() -> void:
+	# 单测场景下没 navmesh,_move_toward 应 fallback 到直走(保持原 _tick_return 行为)
+	var m := _spawn_monster_at(Vector3.ZERO)
+	_gs.start_round()
+	m.global_position = Vector3(3.0, 0.0, 0.0)
+	m.state = m.State.RETURNING
+	m._tick_return(0.016)
+	assert_eq(m.state, m.State.RETURNING,
+		"未到 spawn 应保持 RETURNING")
+	# fallback:朝 spawn(-X 方向)走
+	assert_lt(m.velocity.x, 0.0,
+		"没 navmesh 时 fallback 直走 — velocity 朝 spawn(-X)")
+
 func test_monster_detect_skips_spot_outside_dist() -> void:
 	var m := _spawn_monster_at(Vector3.ZERO)
 	_gs.start_round()

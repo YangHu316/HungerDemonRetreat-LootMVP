@@ -30,6 +30,8 @@ func _ready() -> void:
 	_rng.randomize()
 	add_to_group("containers")
 	add_to_group("interactables")
+	# §07 寻路:容器加 navigation_geometry group(navmesh 烘焙时作障碍物,怪物自动绕行)
+	add_to_group("navigation_geometry")
 	_apply_visual()
 	# Phase 2B:多人 client 跳过本地生成,等 host 的 _rpc_apply_round_start 填充
 	var mm = get_node_or_null("/root/MultiplayerManager")
