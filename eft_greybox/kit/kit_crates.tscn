@@ -1,0 +1,22 @@
+[gd_scene load_steps=2 format=3 uid="uid://bkit010"]
+
+[sub_resource type="StandardMaterial3D" id="m"]
+albedo_color = Color(0.55, 0.42, 0.3, 1)
+
+[node name="kit_crates" type="CSGCombiner3D"]
+use_collision = true
+
+[node name="b1" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+size = Vector3(1.2, 1, 1.2)
+material = SubResource("m")
+
+[node name="b2" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.45, 1.4, 0.3)
+size = Vector3(0.9, 0.8, 0.9)
+material = SubResource("m")
+
+[node name="b3" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 1.3, -0.2)
+size = Vector3(0.8, 0.7, 0.8)
+material = SubResource("m")

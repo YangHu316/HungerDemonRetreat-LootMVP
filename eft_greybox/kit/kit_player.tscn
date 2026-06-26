@@ -1,0 +1,36 @@
+[gd_scene format=3 uid="uid://bkit03a"]
+
+[ext_resource type="Script" path="res://eft_greybox/kit/kit_player.gd" id="1"]
+
+[sub_resource type="CapsuleShape3D" id="col"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="StandardMaterial3D" id="body"]
+albedo_color = Color(0.2, 0.7, 0.95, 1)
+
+[sub_resource type="StandardMaterial3D" id="nose"]
+albedo_color = Color(1, 0.9, 0.3, 1)
+
+[node name="kit_player" type="CharacterBody3D"]
+script = ExtResource("1")
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("col")
+
+[node name="Body" type="Node3D" parent="."]
+
+[node name="box" type="CSGBox3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+size = Vector3(0.8, 1.6, 0.8)
+material = SubResource("body")
+
+[node name="nose" type="CSGBox3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -0.45)
+size = Vector3(0.3, 0.3, 0.2)
+material = SubResource("nose")
+
+[node name="FollowCam" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.351, -0.936, 0, 0.936, 0.351, 0, 16, 6)
+fov = 60.0

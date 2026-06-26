@@ -1,0 +1,576 @@
+[gd_scene format=3 uid="uid://7obhg0sjdiuq"]
+
+; 🧱 关卡白盒搭建套件(kit) · 调色板/目录
+; 4m 网格、每件根原点=落地接触点(放到 y=0 即贴地)。用法：
+;   在编辑器里把需要的「分支」复制进你的关卡场景；常用件右键分支→「另存为场景」做成可重复实例化的预制件。
+;   开网格吸附(编辑器右上角磁吸·Snap 设 1m/2m)对齐搭建。
+; 含垂直度(斜坡/二层平台/栏杆) + 室内(带门墙/带窗墙/货架/掩体) + 锚点(出生/撤离/容器/小游戏插槽/巡逻/躲藏)。
+; Z=42 障碍物排 · Z=56 装饰排 · Z=70 可控角色方块 kit_player(运行后可按 WASD 驾驶它逛目录)。
+; 后三排直接实例化 kit/ 里的预制件——既是展示目录，也顺带验证这些预制件都能正常加载。
+
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_obstacle_boulder.tscn" id="ob_boulder"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_obstacle_barrel.tscn" id="ob_barrel"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_obstacle_fence.tscn" id="ob_fence"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_obstacle_cart.tscn" id="ob_cart"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_obstacle_planter.tscn" id="ob_planter"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_obstacle_rubble.tscn" id="ob_rubble"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_deco_tree.tscn" id="de_tree"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_deco_bush.tscn" id="de_bush"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_deco_pole.tscn" id="de_pole"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_deco_lamp.tscn" id="de_lamp"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_deco_well.tscn" id="de_well"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_deco_haystack.tscn" id="de_haystack"]
+[ext_resource type="PackedScene" path="res://eft_greybox/kit/kit_player.tscn" id="player"]
+
+[sub_resource type="Environment" id="env"]
+background_mode = 1
+background_color = Color(0.09, 0.1, 0.13, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.6, 0.62, 0.66, 1)
+ambient_light_energy = 0.85
+
+[sub_resource type="SystemFont" id="font_cjk"]
+font_names = PackedStringArray("Microsoft YaHei", "Microsoft YaHei UI", "SimHei", "Noto Sans CJK SC")
+
+[sub_resource type="StandardMaterial3D" id="m_struct"]
+albedo_color = Color(0.52, 0.52, 0.56, 1)
+
+[sub_resource type="StandardMaterial3D" id="m_wood"]
+albedo_color = Color(0.55, 0.42, 0.3, 1)
+
+[sub_resource type="StandardMaterial3D" id="m_cover"]
+albedo_color = Color(0.62, 0.55, 0.4, 1)
+
+[sub_resource type="StandardMaterial3D" id="m_cyan"]
+albedo_color = Color(0.5, 0.82, 0.95, 1)
+
+[sub_resource type="StandardMaterial3D" id="m_green"]
+albedo_color = Color(0.2, 0.72, 0.32, 1)
+
+[sub_resource type="StandardMaterial3D" id="m_orange"]
+albedo_color = Color(0.95, 0.55, 0.12, 1)
+
+[sub_resource type="StandardMaterial3D" id="m_red"]
+albedo_color = Color(0.85, 0.2, 0.2, 1)
+
+[sub_resource type="StandardMaterial3D" id="m_teal"]
+albedo_color = Color(0.3, 0.7, 0.62, 1)
+
+[sub_resource type="StandardMaterial3D" id="m_yellow"]
+albedo_color = Color(0.9, 0.78, 0.2, 1)
+
+[node name="KitPalette" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.574, -0.819, 0, 0.819, 0.574, 20, 30, 10)
+shadow_enabled = true
+
+[node name="OverviewCamera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.746, -0.666, 0, 0.666, 0.746, 20, 58, 100)
+current = true
+fov = 60.0
+
+[node name="kit_floor" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+
+[node name="mesh" type="CSGBox3D" parent="kit_floor"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+use_collision = true
+size = Vector3(4, 0.2, 4)
+material = SubResource("m_struct")
+
+[node name="Lbl" type="Label3D" parent="kit_floor"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_floor 地板4×4"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_wall" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0)
+
+[node name="mesh" type="CSGBox3D" parent="kit_wall"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+use_collision = true
+size = Vector3(4, 3, 0.3)
+material = SubResource("m_struct")
+
+[node name="Lbl" type="Label3D" parent="kit_wall"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_wall 墙4×3"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_wall_door" type="CSGCombiner3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 0)
+use_collision = true
+
+[node name="L" type="CSGBox3D" parent="kit_wall_door"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.4, 1.5, 0)
+size = Vector3(1.2, 3, 0.3)
+material = SubResource("m_struct")
+
+[node name="R" type="CSGBox3D" parent="kit_wall_door"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4, 1.5, 0)
+size = Vector3(1.2, 3, 0.3)
+material = SubResource("m_struct")
+
+[node name="Lintel" type="CSGBox3D" parent="kit_wall_door"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.6, 0)
+size = Vector3(1.6, 0.8, 0.3)
+material = SubResource("m_struct")
+
+[node name="Lbl" type="Label3D" parent="kit_wall_door"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_wall_door 带门墙"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_wall_window" type="CSGCombiner3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 0)
+use_collision = true
+
+[node name="Bottom" type="CSGBox3D" parent="kit_wall_window"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+size = Vector3(4, 1.2, 0.3)
+material = SubResource("m_struct")
+
+[node name="Top" type="CSGBox3D" parent="kit_wall_window"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.6, 0)
+size = Vector3(4, 0.8, 0.3)
+material = SubResource("m_struct")
+
+[node name="WL" type="CSGBox3D" parent="kit_wall_window"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 1.7, 0)
+size = Vector3(1, 1, 0.3)
+material = SubResource("m_struct")
+
+[node name="WR" type="CSGBox3D" parent="kit_wall_window"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 1.7, 0)
+size = Vector3(1, 1, 0.3)
+material = SubResource("m_struct")
+
+[node name="Lbl" type="Label3D" parent="kit_wall_window"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_wall_window 带窗墙"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_ramp" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32, 0, 0)
+
+[node name="mesh" type="CSGBox3D" parent="kit_ramp"]
+transform = Transform3D(0.894, 0.447, 0, -0.447, 0.894, 0, 0, 0, 1, 3, 1.5, 0)
+use_collision = true
+size = Vector3(6.7, 0.3, 4)
+material = SubResource("m_struct")
+
+[node name="Lbl" type="Label3D" parent="kit_ramp"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 4.5, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_ramp 斜坡(升3m·上二层)"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_platform" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 0)
+
+[node name="mesh" type="CSGBox3D" parent="kit_platform"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.9, 0)
+use_collision = true
+size = Vector3(4, 0.2, 4)
+material = SubResource("m_struct")
+
+[node name="Lbl" type="Label3D" parent="kit_platform"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.5, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_platform 二层楼板(y=3)"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_railing" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 14)
+
+[node name="mesh" type="CSGBox3D" parent="kit_railing"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+use_collision = true
+size = Vector3(4, 1, 0.1)
+material = SubResource("m_struct")
+
+[node name="Lbl" type="Label3D" parent="kit_railing"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_railing 栏杆"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_cover" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 14)
+
+[node name="mesh" type="CSGBox3D" parent="kit_cover"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+use_collision = true
+size = Vector3(2, 1.2, 1)
+material = SubResource("m_cover")
+
+[node name="Lbl" type="Label3D" parent="kit_cover"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_cover 半身掩体(放大=全身)"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_shelf" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 14)
+
+[node name="mesh" type="CSGBox3D" parent="kit_shelf"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+use_collision = true
+size = Vector3(2, 1.5, 1)
+material = SubResource("m_wood")
+
+[node name="Lbl" type="Label3D" parent="kit_shelf"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_shelf 货架(室内·可作容器)"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_crates" type="CSGCombiner3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 14)
+use_collision = true
+
+[node name="b1" type="CSGBox3D" parent="kit_crates"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+size = Vector3(1.2, 1, 1.2)
+material = SubResource("m_wood")
+
+[node name="b2" type="CSGBox3D" parent="kit_crates"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.45, 1.4, 0.3)
+size = Vector3(0.9, 0.8, 0.9)
+material = SubResource("m_wood")
+
+[node name="b3" type="CSGBox3D" parent="kit_crates"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 1.3, -0.2)
+size = Vector3(0.8, 0.7, 0.8)
+material = SubResource("m_wood")
+
+[node name="Lbl" type="Label3D" parent="kit_crates"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_crates 箱堆(全身掩体)"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_minigame_socket" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 28)
+
+[node name="mesh" type="CSGBox3D" parent="kit_minigame_socket"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+size = Vector3(2, 1.8, 2)
+material = SubResource("m_cyan")
+
+[node name="Socket" type="Marker3D" parent="kit_minigame_socket"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+
+[node name="Lbl" type="Label3D" parent="kit_minigame_socket"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.6, 0)
+pixel_size = 0.028
+billboard = 1
+no_depth_test = true
+modulate = Color(0.6, 0.9, 1, 1)
+text = "小游戏插槽(把 ice_cabinet/electric_crossing 等拖成子节点)"
+font = SubResource("font_cjk")
+font_size = 38
+
+[node name="kit_container" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 28)
+
+[node name="mesh" type="CSGBox3D" parent="kit_container"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+use_collision = true
+size = Vector3(1.2, 1.2, 1.2)
+material = SubResource("m_yellow")
+
+[node name="Lbl" type="Label3D" parent="kit_container"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(1, 0.9, 0.4, 1)
+text = "kit_container 容器(搜刮·食物/钥匙)"
+font = SubResource("font_cjk")
+font_size = 38
+
+[node name="kit_spawn" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 28)
+
+[node name="mesh" type="CSGBox3D" parent="kit_spawn"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+size = Vector3(4, 0.2, 4)
+material = SubResource("m_green")
+
+[node name="SpawnPoint" type="Marker3D" parent="kit_spawn"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="Lbl" type="Label3D" parent="kit_spawn"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(0.4, 1, 0.5, 1)
+text = "kit_spawn 出生点"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_extract" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 28)
+
+[node name="mesh" type="CSGBox3D" parent="kit_extract"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+size = Vector3(4, 0.2, 4)
+material = SubResource("m_orange")
+
+[node name="ExtractPoint" type="Marker3D" parent="kit_extract"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="Lbl" type="Label3D" parent="kit_extract"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(1, 0.6, 0.15, 1)
+text = "kit_extract 撤离点"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_enemy_node" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32, 0, 28)
+
+[node name="mesh" type="CSGBox3D" parent="kit_enemy_node"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+size = Vector3(1.5, 3, 1.5)
+material = SubResource("m_red")
+
+[node name="PatrolPoint" type="Marker3D" parent="kit_enemy_node"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+
+[node name="Lbl" type="Label3D" parent="kit_enemy_node"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.6, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(1, 0.4, 0.4, 1)
+text = "kit_enemy_node 饿魔巡逻锚"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_hide" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 28)
+
+[node name="mesh" type="CSGBox3D" parent="kit_hide"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+use_collision = true
+size = Vector3(1.5, 2, 1.5)
+material = SubResource("m_teal")
+
+[node name="Lbl" type="Label3D" parent="kit_hide"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.6, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(0.5, 0.85, 0.8, 1)
+text = "kit_hide 躲藏点"
+font = SubResource("font_cjk")
+font_size = 40
+
+[node name="kit_obstacle_boulder" parent="." instance=ExtResource("ob_boulder")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 42)
+
+[node name="Lbl" type="Label3D" parent="kit_obstacle_boulder"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.6, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_obstacle_boulder 巨石"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_obstacle_barrel" parent="." instance=ExtResource("ob_barrel")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 42)
+
+[node name="Lbl" type="Label3D" parent="kit_obstacle_barrel"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_obstacle_barrel 油桶"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_obstacle_fence" parent="." instance=ExtResource("ob_fence")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 42)
+
+[node name="Lbl" type="Label3D" parent="kit_obstacle_fence"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_obstacle_fence 栅栏"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_obstacle_cart" parent="." instance=ExtResource("ob_cart")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 42)
+
+[node name="Lbl" type="Label3D" parent="kit_obstacle_cart"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_obstacle_cart 板车"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_obstacle_planter" parent="." instance=ExtResource("ob_planter")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32, 0, 42)
+
+[node name="Lbl" type="Label3D" parent="kit_obstacle_planter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_obstacle_planter 花坛"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_obstacle_rubble" parent="." instance=ExtResource("ob_rubble")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 42)
+
+[node name="Lbl" type="Label3D" parent="kit_obstacle_rubble"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+text = "kit_obstacle_rubble 瓦砾"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_deco_tree" parent="." instance=ExtResource("de_tree")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 56)
+
+[node name="Lbl" type="Label3D" parent="kit_deco_tree"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.5, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(0.6, 0.95, 0.6, 1)
+text = "kit_deco_tree 树"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_deco_bush" parent="." instance=ExtResource("de_bush")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 56)
+
+[node name="Lbl" type="Label3D" parent="kit_deco_bush"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(0.6, 0.95, 0.6, 1)
+text = "kit_deco_bush 灌木(可穿过)"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_deco_pole" parent="." instance=ExtResource("de_pole")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 56)
+
+[node name="Lbl" type="Label3D" parent="kit_deco_pole"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.8, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(0.6, 0.95, 0.6, 1)
+text = "kit_deco_pole 电线杆"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_deco_lamp" parent="." instance=ExtResource("de_lamp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 56)
+
+[node name="Lbl" type="Label3D" parent="kit_deco_lamp"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.8, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(0.6, 0.95, 0.6, 1)
+text = "kit_deco_lamp 路灯(发光)"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_deco_well" parent="." instance=ExtResource("de_well")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32, 0, 56)
+
+[node name="Lbl" type="Label3D" parent="kit_deco_well"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(0.6, 0.95, 0.6, 1)
+text = "kit_deco_well 水井"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_deco_haystack" parent="." instance=ExtResource("de_haystack")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 56)
+
+[node name="Lbl" type="Label3D" parent="kit_deco_haystack"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.6, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(0.6, 0.95, 0.6, 1)
+text = "kit_deco_haystack 草垛"
+font = SubResource("font_cjk")
+font_size = 36
+
+[node name="kit_player" parent="." instance=ExtResource("player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 70)
+auto_camera = false
+gravity = 0.0
+
+[node name="Lbl" type="Label3D" parent="kit_player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.8, 0)
+pixel_size = 0.028
+billboard = 1
+no_depth_test = true
+modulate = Color(0.45, 0.85, 1, 1)
+text = "kit_player 可控角色方块(运行后 WASD 移动 / Shift 跑 · 拖进关卡即玩)"
+font = SubResource("font_cjk")
+font_size = 36

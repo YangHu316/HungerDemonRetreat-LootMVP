@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3 uid="uid://bkit014"]
+
+[sub_resource type="StandardMaterial3D" id="m"]
+albedo_color = Color(0.95, 0.55, 0.12, 1)
+
+[node name="kit_extract" type="Node3D"]
+
+[node name="mesh" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+size = Vector3(4, 0.2, 4)
+material = SubResource("m")
+
+[node name="ExtractPoint" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)

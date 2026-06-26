@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3 uid="uid://bkit023"]
+
+[sub_resource type="StandardMaterial3D" id="trunk"]
+albedo_color = Color(0.35, 0.25, 0.16, 1)
+
+[sub_resource type="StandardMaterial3D" id="canopy"]
+albedo_color = Color(0.2, 0.4, 0.2, 1)
+
+[node name="kit_deco_tree" type="Node3D"]
+
+[node name="trunk" type="CSGCylinder3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+use_collision = true
+radius = 0.25
+height = 3.0
+material = SubResource("trunk")
+
+[node name="canopy" type="CSGSphere3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.6, 0)
+radius = 1.6
+material = SubResource("canopy")

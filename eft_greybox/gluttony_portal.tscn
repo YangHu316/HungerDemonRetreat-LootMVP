@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bv2rcvvk3mj8r"]
+
+[ext_resource type="Script" path="res://eft_greybox/gluttony_portal_game.gd" id="1_glut"]
+
+[node name="GluttonyPortalGame" type="Node2D"]
+script = ExtResource("1_glut")

@@ -1,0 +1,27 @@
+[gd_scene load_steps=2 format=3 uid="uid://bkit004"]
+
+[sub_resource type="StandardMaterial3D" id="m"]
+albedo_color = Color(0.52, 0.52, 0.56, 1)
+
+[node name="kit_wall_window" type="CSGCombiner3D"]
+use_collision = true
+
+[node name="Bottom" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+size = Vector3(4, 1.2, 0.3)
+material = SubResource("m")
+
+[node name="Top" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.6, 0)
+size = Vector3(4, 0.8, 0.3)
+material = SubResource("m")
+
+[node name="WL" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 1.7, 0)
+size = Vector3(1, 1, 0.3)
+material = SubResource("m")
+
+[node name="WR" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 1.7, 0)
+size = Vector3(1, 1, 0.3)
+material = SubResource("m")

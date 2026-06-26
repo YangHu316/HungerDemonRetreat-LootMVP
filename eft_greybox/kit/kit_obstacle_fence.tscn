@@ -1,0 +1,22 @@
+[gd_scene load_steps=2 format=3 uid="uid://bkit019"]
+
+[sub_resource type="StandardMaterial3D" id="m"]
+albedo_color = Color(0.55, 0.42, 0.3, 1)
+
+[node name="kit_obstacle_fence" type="CSGCombiner3D"]
+use_collision = true
+
+[node name="rail" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+size = Vector3(4, 0.25, 0.12)
+material = SubResource("m")
+
+[node name="post1" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.9, 0.6, 0)
+size = Vector3(0.15, 1.2, 0.15)
+material = SubResource("m")
+
+[node name="post2" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.9, 0.6, 0)
+size = Vector3(0.15, 1.2, 0.15)
+material = SubResource("m")

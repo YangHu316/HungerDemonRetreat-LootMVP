@@ -1,0 +1,764 @@
+[gd_scene load_steps=27 format=3 uid="uid://cyj1yalaewiuq"]
+
+; 测试关卡白盒 v3 · 5分钟单向搜打撤(俯视角·参照乡村鸟瞰图·CSG手搓组件)
+; 坐标：俯视，X横(图左-X/右+X)，Z纵(图上-Z/下+Z)，地面y=0，米。地图 X[-124,150] Z[-200,200]。
+; 单向路线：①村屋(出生·搜刮·敲冰·钥匙1) → 白棚(钥匙2) → ②开阔农田(高暴露·饿魔巡逻·钥匙3)
+;           → ③凌波渡电过通电溪(单向闸1) → ④三钥匙撤离大门(单向闸2) → 东岸撤离。
+; 通电溪流南北封到墙=电墙不可涉，仅一处落脚点可渡 → 渡过即单向。
+
+[sub_resource type="Environment" id="env"]
+background_mode = 1
+background_color = Color(0.06, 0.07, 0.1, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.55, 0.57, 0.62, 1)
+ambient_light_energy = 0.85
+
+[sub_resource type="SystemFont" id="font_cjk"]
+font_names = PackedStringArray("Microsoft YaHei", "Microsoft YaHei UI", "SimHei", "Noto Sans CJK SC")
+
+[sub_resource type="StandardMaterial3D" id="mat_dirt"]
+albedo_color = Color(0.3, 0.27, 0.22, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_field"]
+albedo_color = Color(0.32, 0.45, 0.22, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_road"]
+albedo_color = Color(0.3, 0.31, 0.33, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_wall"]
+albedo_color = Color(0.4, 0.4, 0.44, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_darkroof"]
+albedo_color = Color(0.18, 0.18, 0.2, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_whiteroof"]
+albedo_color = Color(0.82, 0.84, 0.86, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_water"]
+albedo_color = Color(0.12, 0.46, 0.66, 1)
+emission_enabled = true
+emission = Color(0.15, 0.5, 0.8, 1)
+emission_energy_multiplier = 0.6
+
+[sub_resource type="StandardMaterial3D" id="mat_bridge"]
+albedo_color = Color(0.5, 0.42, 0.3, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_ridge"]
+albedo_color = Color(0.24, 0.32, 0.16, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_spawn"]
+albedo_color = Color(0.2, 0.72, 0.32, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_extract"]
+albedo_color = Color(0.95, 0.55, 0.12, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_box"]
+albedo_color = Color(0.78, 0.62, 0.25, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_shelf"]
+albedo_color = Color(0.55, 0.42, 0.3, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_bin"]
+albedo_color = Color(0.22, 0.4, 0.26, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_ice"]
+albedo_color = Color(0.55, 0.82, 0.95, 1)
+emission_enabled = true
+emission = Color(0.3, 0.6, 0.8, 1)
+emission_energy_multiplier = 0.3
+
+[sub_resource type="StandardMaterial3D" id="mat_key"]
+albedo_color = Color(0.92, 0.82, 0.18, 1)
+emission_enabled = true
+emission = Color(0.6, 0.5, 0.1, 1)
+emission_energy_multiplier = 0.3
+
+[sub_resource type="StandardMaterial3D" id="mat_gate"]
+albedo_color = Color(0.55, 0.22, 0.18, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_gluttony"]
+albedo_color = Color(0.55, 0.32, 0.72, 1)
+emission_enabled = true
+emission = Color(0.4, 0.2, 0.6, 1)
+emission_energy_multiplier = 0.4
+
+[sub_resource type="StandardMaterial3D" id="mat_shack"]
+albedo_color = Color(0.22, 0.42, 0.78, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_hide"]
+albedo_color = Color(0.3, 0.7, 0.62, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_haystack"]
+albedo_color = Color(0.62, 0.52, 0.22, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_stone"]
+albedo_color = Color(0.45, 0.4, 0.34, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_enemy"]
+albedo_color = Color(0.85, 0.18, 0.18, 1)
+emission_enabled = true
+emission = Color(0.6, 0.1, 0.1, 1)
+emission_energy_multiplier = 0.5
+
+[sub_resource type="StandardMaterial3D" id="mat_tree"]
+albedo_color = Color(0.2, 0.34, 0.2, 1)
+
+[node name="MapGreybox" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.574, -0.819, 0, 0.819, 0.574, 13, 120, 0)
+shadow_enabled = true
+
+[node name="OverviewCamera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 13, 360, 0)
+current = true
+fov = 60.0
+
+[node name="Foundation" type="Node3D" parent="."]
+
+[node name="Ground" type="CSGBox3D" parent="Foundation"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, -0.5, 0)
+use_collision = true
+size = Vector3(274, 1, 404)
+material = SubResource("mat_dirt")
+
+[node name="FieldFloor" type="CSGBox3D" parent="Foundation"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50, 0.05, 0)
+size = Vector3(139, 0.1, 404)
+material = SubResource("mat_field")
+
+[node name="LeftRoad" type="CSGBox3D" parent="Foundation"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -113, 0.07, 0)
+size = Vector3(14, 0.14, 404)
+material = SubResource("mat_road")
+
+[node name="EastBankGround" type="CSGBox3D" parent="Foundation"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 134, 0.1, -118)
+size = Vector3(24, 0.4, 120)
+material = SubResource("mat_road")
+
+[node name="WallN" type="CSGBox3D" parent="Foundation"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 1.5, -202)
+use_collision = true
+size = Vector3(274, 3, 1)
+material = SubResource("mat_wall")
+
+[node name="WallS" type="CSGBox3D" parent="Foundation"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 1.5, 202)
+use_collision = true
+size = Vector3(274, 3, 1)
+material = SubResource("mat_wall")
+
+[node name="WallW" type="CSGBox3D" parent="Foundation"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -124, 1.5, 0)
+use_collision = true
+size = Vector3(1, 3, 404)
+material = SubResource("mat_wall")
+
+[node name="WallE" type="CSGBox3D" parent="Foundation"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 150, 1.5, 0)
+use_collision = true
+size = Vector3(1, 3, 404)
+material = SubResource("mat_wall")
+
+[node name="Buildings" type="Node3D" parent="."]
+
+[node name="DarkMain" type="CSGCombiner3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -55, 0, -76)
+use_collision = true
+
+[node name="Back" type="CSGBox3D" parent="Buildings/DarkMain"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -22)
+size = Vector3(82, 4, 0.4)
+material = SubResource("mat_darkroof")
+
+[node name="Left" type="CSGBox3D" parent="Buildings/DarkMain"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -41, 2, 0)
+size = Vector3(0.4, 4, 44)
+material = SubResource("mat_darkroof")
+
+[node name="Right" type="CSGBox3D" parent="Buildings/DarkMain"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 41, 2, 0)
+size = Vector3(0.4, 4, 44)
+material = SubResource("mat_darkroof")
+
+[node name="DoorL" type="CSGBox3D" parent="Buildings/DarkMain"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22, 2, 22)
+size = Vector3(38, 4, 0.4)
+material = SubResource("mat_darkroof")
+
+[node name="DoorR" type="CSGBox3D" parent="Buildings/DarkMain"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22, 2, 22)
+size = Vector3(38, 4, 0.4)
+material = SubResource("mat_darkroof")
+
+[node name="WhiteShed" type="CSGCombiner3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -67, 0, -162)
+use_collision = true
+
+[node name="Back" type="CSGBox3D" parent="Buildings/WhiteShed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -26)
+size = Vector3(82, 5, 0.4)
+material = SubResource("mat_whiteroof")
+
+[node name="Left" type="CSGBox3D" parent="Buildings/WhiteShed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -41, 2.5, 0)
+size = Vector3(0.4, 5, 52)
+material = SubResource("mat_whiteroof")
+
+[node name="Right" type="CSGBox3D" parent="Buildings/WhiteShed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 41, 2.5, 0)
+size = Vector3(0.4, 5, 52)
+material = SubResource("mat_whiteroof")
+
+[node name="DoorL" type="CSGBox3D" parent="Buildings/WhiteShed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22, 2.5, 26)
+size = Vector3(38, 5, 0.4)
+material = SubResource("mat_whiteroof")
+
+[node name="DoorR" type="CSGBox3D" parent="Buildings/WhiteShed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22, 2.5, 26)
+size = Vector3(38, 5, 0.4)
+material = SubResource("mat_whiteroof")
+
+[node name="DarkCourtyard" type="CSGBox3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -78, 1.8, -8)
+use_collision = true
+size = Vector3(42, 3.6, 48)
+material = SubResource("mat_darkroof")
+
+[node name="YardPatch" type="CSGBox3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0.06, 12)
+size = Vector3(40, 0.1, 48)
+material = SubResource("mat_road")
+
+[node name="Car1" type="CSGBox3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -34, 0.75, 4)
+use_collision = true
+size = Vector3(4, 1.5, 2)
+material = SubResource("mat_road")
+
+[node name="Car2" type="CSGBox3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -28, 0.75, 22)
+use_collision = true
+size = Vector3(4, 1.5, 2)
+material = SubResource("mat_road")
+
+[node name="HutA" type="CSGBox3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28, 1.5, -30)
+use_collision = true
+size = Vector3(10, 3, 10)
+material = SubResource("mat_darkroof")
+
+[node name="HutB" type="CSGBox3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 75, 1.5, -95)
+use_collision = true
+size = Vector3(10, 3, 10)
+material = SubResource("mat_darkroof")
+
+[node name="SmallHouse1" type="CSGBox3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -96, 1.5, 96)
+use_collision = true
+size = Vector3(13, 3, 16)
+material = SubResource("mat_darkroof")
+
+[node name="SmallHouse2" type="CSGBox3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -77, 1.5, 136)
+use_collision = true
+size = Vector3(12, 3, 14)
+material = SubResource("mat_darkroof")
+
+[node name="SmallHouse3" type="CSGBox3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -101, 1.5, 168)
+use_collision = true
+size = Vector3(11, 3, 12)
+material = SubResource("mat_darkroof")
+
+[node name="LblZone1" type="Label3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -55, 8, -50)
+pixel_size = 0.08
+billboard = 1
+no_depth_test = true
+modulate = Color(0.9, 0.85, 0.7, 1)
+text = "① 村屋区·搜刮+敲冰+钥匙#1（出生在此）"
+font = SubResource("font_cjk")
+font_size = 60
+outline_size = 14
+
+[node name="LblShed" type="Label3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -67, 7, -162)
+pixel_size = 0.06
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.95, 0.98, 1)
+text = "白色大棚·钥匙#2 +（暴食可选）"
+font = SubResource("font_cjk")
+font_size = 52
+outline_size = 12
+
+[node name="Farmland" type="Node3D" parent="."]
+
+[node name="RidgeH1" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50, 0.25, -160)
+size = Vector3(136, 0.5, 1)
+material = SubResource("mat_ridge")
+
+[node name="RidgeH2" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50, 0.25, -80)
+size = Vector3(136, 0.5, 1)
+material = SubResource("mat_ridge")
+
+[node name="RidgeH3" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50, 0.25, 0)
+size = Vector3(136, 0.5, 1)
+material = SubResource("mat_ridge")
+
+[node name="RidgeH4" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50, 0.25, 80)
+size = Vector3(136, 0.5, 1)
+material = SubResource("mat_ridge")
+
+[node name="RidgeH5" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50, 0.25, 160)
+size = Vector3(136, 0.5, 1)
+material = SubResource("mat_ridge")
+
+[node name="RidgeV1" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.25, 0)
+size = Vector3(1, 0.5, 380)
+material = SubResource("mat_ridge")
+
+[node name="RidgeV2" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 55, 0.25, 0)
+size = Vector3(1, 0.5, 380)
+material = SubResource("mat_ridge")
+
+[node name="RidgeV3" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0.25, 0)
+size = Vector3(1, 0.5, 380)
+material = SubResource("mat_ridge")
+
+[node name="Hay1" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0.75, -60)
+use_collision = true
+size = Vector3(1.6, 1.5, 1.6)
+material = SubResource("mat_haystack")
+
+[node name="Hay2" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0.75, -90)
+use_collision = true
+size = Vector3(1.6, 1.5, 1.6)
+material = SubResource("mat_haystack")
+
+[node name="Hay3" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 85, 0.75, -50)
+use_collision = true
+size = Vector3(1.6, 1.5, 1.6)
+material = SubResource("mat_haystack")
+
+[node name="Tree1" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 90, 2, 30)
+size = Vector3(0.6, 4, 0.6)
+material = SubResource("mat_tree")
+
+[node name="Tree2" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 70, 2, 60)
+size = Vector3(0.6, 4, 0.6)
+material = SubResource("mat_tree")
+
+[node name="Tree3" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 35, 2, 35)
+size = Vector3(0.6, 4, 0.6)
+material = SubResource("mat_tree")
+
+[node name="Tree4" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25, 2, 120)
+size = Vector3(0.6, 4, 0.6)
+material = SubResource("mat_tree")
+
+[node name="Tree5" type="CSGBox3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 88, 2, -10)
+size = Vector3(0.6, 4, 0.6)
+material = SubResource("mat_tree")
+
+[node name="LblZone2" type="Label3D" parent="Farmland"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 9, -38)
+pixel_size = 0.09
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.8, 0.5, 1)
+text = "② 开阔农田·高暴露·饿魔巡逻（田垄/草垛/窝棚=掩体）"
+font = SubResource("font_cjk")
+font_size = 58
+outline_size = 14
+
+[node name="Creek" type="Node3D" parent="."]
+
+[node name="Stream" type="CSGBox3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 108, -0.2, 45)
+size = Vector3(20, 0.7, 310)
+material = SubResource("mat_water")
+
+[node name="StreamNorthSeal" type="CSGBox3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 108, -0.2, -163)
+size = Vector3(20, 0.7, 74)
+material = SubResource("mat_water")
+
+[node name="BridgeDeck" type="CSGBox3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 95, 0.55, -118)
+use_collision = true
+size = Vector3(46, 0.5, 16)
+material = SubResource("mat_bridge")
+
+[node name="RailN" type="CSGBox3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 95, 1.1, -126)
+size = Vector3(46, 0.6, 0.4)
+material = SubResource("mat_bridge")
+
+[node name="RailS" type="CSGBox3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 95, 1.1, -110)
+size = Vector3(46, 0.6, 0.4)
+material = SubResource("mat_bridge")
+
+[node name="Stone1" type="CSGBox3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 99, 0.3, -118)
+use_collision = true
+size = Vector3(1.8, 0.6, 1.8)
+material = SubResource("mat_stone")
+
+[node name="Stone2" type="CSGBox3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 103, 0.3, -115)
+use_collision = true
+size = Vector3(1.8, 0.6, 1.8)
+material = SubResource("mat_stone")
+
+[node name="Stone3" type="CSGBox3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 107, 0.3, -120)
+use_collision = true
+size = Vector3(1.8, 0.6, 1.8)
+material = SubResource("mat_stone")
+
+[node name="Stone4" type="CSGBox3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 111, 0.3, -116)
+use_collision = true
+size = Vector3(1.8, 0.6, 1.8)
+material = SubResource("mat_stone")
+
+[node name="Stone5" type="CSGBox3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 115, 0.3, -119)
+use_collision = true
+size = Vector3(1.8, 0.6, 1.8)
+material = SubResource("mat_stone")
+
+[node name="Breaker" type="CSGBox3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 119, 0.9, -118)
+use_collision = true
+size = Vector3(1, 1.8, 1)
+material = SubResource("mat_key")
+
+[node name="LblCreek" type="Label3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 108, 2.5, 40)
+pixel_size = 0.07
+billboard = 1
+no_depth_test = true
+modulate = Color(0.5, 0.8, 1, 1)
+text = "通电溪流（电墙·不可涉·南北封到墙）"
+font = SubResource("font_cjk")
+font_size = 54
+outline_size = 12
+
+[node name="LblCross" type="Label3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 108, 3, -118)
+pixel_size = 0.06
+billboard = 1
+no_depth_test = true
+modulate = Color(0.6, 0.9, 1, 1)
+text = "③ 凌波渡电·落脚点+电闸（单向闸1·唯一渡口）"
+font = SubResource("font_cjk")
+font_size = 50
+outline_size = 12
+
+[node name="LblBridge" type="Label3D" parent="Creek"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 2, -118)
+pixel_size = 0.045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.9, 0.7, 0.5, 1)
+text = "桥·饿魔C线巡逻路（玩家走渡电·勿走桥）"
+font = SubResource("font_cjk")
+font_size = 46
+outline_size = 10
+
+[node name="EastBank" type="Node3D" parent="."]
+
+[node name="KeyGate" type="CSGBox3D" parent="EastBank"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 124, 1.25, -118)
+use_collision = true
+size = Vector3(2, 2.5, 14)
+material = SubResource("mat_gate")
+
+[node name="KeySlot" type="CSGBox3D" parent="EastBank"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 124, 2, -118)
+size = Vector3(2.2, 0.6, 3)
+material = SubResource("mat_key")
+
+[node name="LblGate" type="Label3D" parent="EastBank"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 124, 4, -118)
+pixel_size = 0.06
+billboard = 1
+no_depth_test = true
+modulate = Color(1, 0.7, 0.4, 1)
+text = "④ 三钥匙撤离大门（单向闸2·凑3钥匙开门）"
+font = SubResource("font_cjk")
+font_size = 50
+outline_size = 12
+
+[node name="Containers" type="Node3D" parent="."]
+
+[node name="Box1" type="CSGBox3D" parent="Containers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -48, 0.6, 32)
+use_collision = true
+size = Vector3(1.5, 1.2, 1.5)
+material = SubResource("mat_box")
+
+[node name="Box2" type="CSGBox3D" parent="Containers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -45, 0.6, 36)
+use_collision = true
+size = Vector3(1.5, 1.2, 1.5)
+material = SubResource("mat_box")
+
+[node name="Bin" type="CSGBox3D" parent="Containers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -32, 0.6, 22)
+use_collision = true
+size = Vector3(1, 1.2, 1)
+material = SubResource("mat_bin")
+
+[node name="Shelf1Key1" type="CSGBox3D" parent="Containers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -68, 0.75, -88)
+use_collision = true
+size = Vector3(2, 1.5, 1)
+material = SubResource("mat_shelf")
+
+[node name="Shelf2" type="CSGBox3D" parent="Containers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -42, 0.75, -68)
+use_collision = true
+size = Vector3(2, 1.5, 1)
+material = SubResource("mat_shelf")
+
+[node name="ShelfKey1Top" type="CSGBox3D" parent="Containers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -68, 1.7, -88)
+size = Vector3(0.7, 0.7, 0.7)
+material = SubResource("mat_key")
+
+[node name="WhiteShelfKey2" type="CSGBox3D" parent="Containers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0.75, -150)
+use_collision = true
+size = Vector3(2, 1.5, 1)
+material = SubResource("mat_shelf")
+
+[node name="ShelfKey2Top" type="CSGBox3D" parent="Containers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 1.7, -150)
+size = Vector3(0.7, 0.7, 0.7)
+material = SubResource("mat_key")
+
+[node name="EastShelf" type="CSGBox3D" parent="Containers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 134, 0.75, -100)
+use_collision = true
+size = Vector3(2, 1.5, 1)
+material = SubResource("mat_shelf")
+
+[node name="LblContainers" type="Label3D" parent="Containers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -48, 2, 32)
+pixel_size = 0.045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.9, 0.8, 0.5, 1)
+text = "搜刮容器（纸箱/货架/垃圾桶→食物·钥匙）"
+font = SubResource("font_cjk")
+font_size = 46
+outline_size = 10
+
+[node name="Minigames" type="Node3D" parent="."]
+
+[node name="IceLonghouse" type="CSGBox3D" parent="Minigames"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -62, 0.9, -82)
+use_collision = true
+size = Vector3(2, 1.8, 2)
+material = SubResource("mat_ice")
+
+[node name="LblIce1" type="Label3D" parent="Minigames"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -62, 2.4, -82)
+pixel_size = 0.045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.6, 0.9, 1, 1)
+text = "🧊敲冰开柜（多格盲盒）"
+font = SubResource("font_cjk")
+font_size = 46
+outline_size = 10
+
+[node name="IceFarmlandKey3" type="CSGBox3D" parent="Minigames"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 48, 0.9, -50)
+use_collision = true
+size = Vector3(2, 1.8, 2)
+material = SubResource("mat_ice")
+
+[node name="IceKey3Top" type="CSGBox3D" parent="Minigames"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 48, 2, -50)
+size = Vector3(0.7, 0.7, 0.7)
+material = SubResource("mat_key")
+
+[node name="LblIce2" type="Label3D" parent="Minigames"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 48, 2.6, -50)
+pixel_size = 0.045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.6, 0.9, 1, 1)
+text = "🧊敲冰·菜窖（钥匙#3·开阔处发声=高暴露）"
+font = SubResource("font_cjk")
+font_size = 46
+outline_size = 10
+
+[node name="Gluttony" type="CSGBox3D" parent="Minigames"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -95, 1.5, -180)
+use_collision = true
+size = Vector3(2, 3, 2)
+material = SubResource("mat_gluttony")
+
+[node name="LblGluttony" type="Label3D" parent="Minigames"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -95, 3.5, -180)
+pixel_size = 0.04
+billboard = 1
+no_depth_test = true
+modulate = Color(0.8, 0.6, 0.95, 1)
+text = "🌀暴食传送门（可选·高风险·可跳过）"
+font = SubResource("font_cjk")
+font_size = 44
+outline_size = 10
+
+[node name="Hides" type="Node3D" parent="."]
+
+[node name="Locker" type="CSGBox3D" parent="Hides"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -46, 1, -88)
+use_collision = true
+size = Vector3(1, 2, 1.5)
+material = SubResource("mat_hide")
+
+[node name="BoxPile" type="CSGBox3D" parent="Hides"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -76, 0.75, -150)
+use_collision = true
+size = Vector3(2, 1.5, 2)
+material = SubResource("mat_hide")
+
+[node name="FarmShack" type="CSGBox3D" parent="Hides"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 1, -70)
+use_collision = true
+size = Vector3(8, 2, 8)
+material = SubResource("mat_shack")
+
+[node name="EastShack" type="CSGBox3D" parent="Hides"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 132, 1, -130)
+use_collision = true
+size = Vector3(5, 2, 5)
+material = SubResource("mat_shack")
+
+[node name="ShackS1" type="CSGBox3D" parent="Hides"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 77, 1, -160)
+use_collision = true
+size = Vector3(8, 2, 8)
+material = SubResource("mat_shack")
+
+[node name="ShackS2" type="CSGBox3D" parent="Hides"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 1, 110)
+use_collision = true
+size = Vector3(7, 2, 7)
+material = SubResource("mat_shack")
+
+[node name="ShackS3" type="CSGBox3D" parent="Hides"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 1, 150)
+use_collision = true
+size = Vector3(7, 2, 7)
+material = SubResource("mat_shack")
+
+[node name="LblHide" type="Label3D" parent="Hides"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 3, -70)
+pixel_size = 0.045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.5, 0.85, 0.8, 1)
+text = "躲藏点（窝棚/储物柜/草垛=断视线·15~25s甩开）"
+font = SubResource("font_cjk")
+font_size = 46
+outline_size = 10
+
+[node name="Enemy" type="Node3D" parent="."]
+
+[node name="PatrolFarm" type="CSGBox3D" parent="Enemy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 55, 1.5, -60)
+size = Vector3(2, 3, 2)
+material = SubResource("mat_enemy")
+
+[node name="PatrolFarmPoint" type="Marker3D" parent="Enemy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 55, 1.5, -60)
+
+[node name="PatrolLong" type="CSGBox3D" parent="Enemy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -50, 1.5, -30)
+size = Vector3(2, 3, 2)
+material = SubResource("mat_enemy")
+
+[node name="PatrolLongPoint" type="Marker3D" parent="Enemy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -50, 1.5, -30)
+
+[node name="LblEnemy" type="Label3D" parent="Enemy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 55, 4, -60)
+pixel_size = 0.05
+billboard = 1
+no_depth_test = true
+modulate = Color(1, 0.4, 0.4, 1)
+text = "饿魔巡逻锚（C线农田·A线村屋；声音惊动→扑声源点）"
+font = SubResource("font_cjk")
+font_size = 48
+outline_size = 12
+
+[node name="Markers" type="Node3D" parent="."]
+
+[node name="SpawnPad" type="CSGBox3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -43, 0.15, 40)
+size = Vector3(8, 0.3, 8)
+material = SubResource("mat_spawn")
+
+[node name="SpawnPoint" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -43, 1, 40)
+
+[node name="LblSpawn" type="Label3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -43, 2.6, 40)
+pixel_size = 0.06
+billboard = 1
+no_depth_test = true
+modulate = Color(0.4, 1, 0.5, 1)
+text = "出生点 SPAWN（村屋·路线起点A）"
+font = SubResource("font_cjk")
+font_size = 56
+outline_size = 12
+
+[node name="ExtractPad" type="CSGBox3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 138, 0.25, -118)
+size = Vector3(10, 0.5, 10)
+material = SubResource("mat_extract")
+
+[node name="ExtractPoint" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 138, 1, -118)
+
+[node name="LblExtract" type="Label3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 138, 2.6, -118)
+pixel_size = 0.06
+billboard = 1
+no_depth_test = true
+modulate = Color(1, 0.6, 0.15, 1)
+text = "撤离点 EXTRACT（东岸·路线终点B·不回头）"
+font = SubResource("font_cjk")
+font_size = 56
+outline_size = 12

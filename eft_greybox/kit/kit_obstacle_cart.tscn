@@ -1,0 +1,25 @@
+[gd_scene load_steps=3 format=3 uid="uid://bkit020"]
+
+[sub_resource type="StandardMaterial3D" id="m"]
+albedo_color = Color(0.3, 0.35, 0.4, 1)
+
+[sub_resource type="StandardMaterial3D" id="mw"]
+albedo_color = Color(0.15, 0.15, 0.17, 1)
+
+[node name="kit_obstacle_cart" type="CSGCombiner3D"]
+use_collision = true
+
+[node name="body" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
+size = Vector3(3.5, 1.2, 1.8)
+material = SubResource("m")
+
+[node name="wheelL" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 0.4, 0)
+size = Vector3(0.3, 0.8, 1.95)
+material = SubResource("mw")
+
+[node name="wheelR" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 0.4, 0)
+size = Vector3(0.3, 0.8, 1.95)
+material = SubResource("mw")

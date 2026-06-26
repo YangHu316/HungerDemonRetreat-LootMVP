@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://c01n7b75m6hb8"]
+
+[ext_resource type="Script" path="res://eft_greybox/electric_crossing_game.gd" id="1_eltcr"]
+
+[node name="ElectricCrossingGame" type="Node3D"]
+script = ExtResource("1_eltcr")

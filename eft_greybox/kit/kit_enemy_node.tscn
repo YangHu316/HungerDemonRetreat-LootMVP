@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3 uid="uid://bkit015"]
+
+[sub_resource type="StandardMaterial3D" id="m"]
+albedo_color = Color(0.85, 0.2, 0.2, 1)
+
+[node name="kit_enemy_node" type="Node3D"]
+
+[node name="mesh" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+size = Vector3(1.5, 3, 1.5)
+material = SubResource("m")
+
+[node name="PatrolPoint" type="Marker3D" parent="."]

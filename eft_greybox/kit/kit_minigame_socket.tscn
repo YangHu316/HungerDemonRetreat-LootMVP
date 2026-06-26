@@ -1,0 +1,26 @@
+[gd_scene load_steps=3 format=3 uid="uid://bkit011"]
+
+[sub_resource type="StandardMaterial3D" id="m"]
+albedo_color = Color(0.5, 0.82, 0.95, 1)
+
+[sub_resource type="SystemFont" id="f"]
+font_names = PackedStringArray("Microsoft YaHei", "SimHei")
+
+[node name="kit_minigame_socket" type="Node3D"]
+
+[node name="mesh" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+size = Vector3(2, 1.8, 2)
+material = SubResource("m")
+
+[node name="Socket" type="Marker3D" parent="."]
+
+[node name="Lbl" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
+pixel_size = 0.03
+billboard = 1
+no_depth_test = true
+modulate = Color(0.6, 0.9, 1, 1)
+text = "小游戏插槽：把 ice_cabinet/electric_crossing/gluttony_portal 拖成子节点"
+font = SubResource("f")
+font_size = 36

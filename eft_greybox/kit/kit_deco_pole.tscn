@@ -1,0 +1,12 @@
+[gd_scene load_steps=2 format=3 uid="uid://bkit025"]
+
+[sub_resource type="StandardMaterial3D" id="m"]
+albedo_color = Color(0.4, 0.4, 0.44, 1)
+
+[node name="kit_deco_pole" type="Node3D"]
+
+[node name="mesh" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+use_collision = true
+size = Vector3(0.3, 5, 0.3)
+material = SubResource("m")

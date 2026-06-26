@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://btjwnt3sbq1d8"]
+
+[ext_resource type="Script" path="res://eft_greybox/dev_launcher.gd" id="1_devl"]
+
+[node name="DevLauncher" type="Node"]
+script = ExtResource("1_devl")
